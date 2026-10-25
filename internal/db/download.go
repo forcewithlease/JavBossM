@@ -146,6 +146,30 @@ func (store *Store) CreateDownloadJob(ctx context.Context, job *models.DownloadJ
 	return nil
 }
 
+// DownloadJobRemoteTaskIDs maps downloader task ids to JavBoss job ids. The
+// remote task list uses it to hide tasks that are already shown in the JavBoss
+// download queue, avoiding duplicate rows and double-counted status numbers.
+func (store *Store) DownloadJobRemoteTaskIDs(ctx context.Context) (map[string]int64, error) {
+	if store.conn == nil {
+		return nil, errors.New("list download job remote task ids: nil db")
+	}
+	var rows []struct {
+		ID           int64
+		RemoteTaskID string
+	}
+	if err := store.conn.WithContext(ctx).Model(&models.DownloadJob{}).
+		Select("id, remote_task_id").
+		Where("remote_task_id <> ''").
+		Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("list download job remote task ids: %w", err)
+	}
+	result := make(map[string]int64, len(rows))
+	for _, row := range rows {
+		result[row.RemoteTaskID] = row.ID
+	}
+	return result, nil
+}
+
 func (store *Store) GetDownloadJob(ctx context.Context, id int64) (*models.DownloadJob, error) {
 	if store.conn == nil {
 		return nil, errors.New("get download job: nil db")

@@ -401,6 +401,7 @@ func processLocalDownloadJob(ctx context.Context, job *models.DownloadJob) error
 
 	remoteTaskID := strings.TrimSpace(job.RemoteTaskID)
 	finished := false
+	var finalStatus *downloader.LocalStatus
 	defer func() {
 		if remoteTaskID == "" || finished {
 			return
@@ -434,6 +435,7 @@ func processLocalDownloadJob(ctx context.Context, job *models.DownloadJob) error
 			return err
 		} else if status.State == downloader.OfflineComplete {
 			finished = true
+			finalStatus = status
 		}
 	}
 	if remoteTaskID == "" {
@@ -447,9 +449,11 @@ func processLocalDownloadJob(ctx context.Context, job *models.DownloadJob) error
 		}
 	}
 	if !finished {
-		if err := waitForLocalDownload(ctx, client, job.ID, remoteTaskID, providerFolder, job.InfoHash); err != nil {
+		status, err := waitForLocalDownload(ctx, client, job.ID, remoteTaskID, providerFolder, job.InfoHash)
+		if err != nil {
 			return err
 		}
+		finalStatus = status
 	}
 	finished = true
 
@@ -462,14 +466,97 @@ func processLocalDownloadJob(ctx context.Context, job *models.DownloadJob) error
 	if err != nil {
 		return err
 	}
+	// Xunlei reports the real download folder. Depending on the configured
+	// download root it may be the media library itself or the regular download
+	// directory. Map it to the matching host path when that path exists.
+	inLibrary := false
+	if finalStatus != nil && strings.TrimSpace(finalStatus.Path) != "" {
+		remoteRoot := strings.TrimSpace(settings.RemoteFolder)
+		if remoteRoot != "" && strings.HasPrefix(finalStatus.Path, remoteRoot) {
+			relative := strings.TrimLeft(strings.TrimPrefix(finalStatus.Path, remoteRoot), string(os.PathSeparator))
+			mediaRoot, _ := firstMediaDirectory(ctx)
+			candidates := []struct {
+				root      string
+				inLibrary bool
+			}{
+				{root: mediaRoot, inLibrary: true},
+				{root: strings.TrimSpace(job.DownloadDirectory), inLibrary: false},
+			}
+			for _, candidate := range candidates {
+				if candidate.root == "" {
+					continue
+				}
+				path := filepath.Join(candidate.root, relative)
+				if _, statErr := os.Stat(path); statErr == nil {
+					localFolder = path
+					inLibrary = candidate.inLibrary
+					break
+				}
+			}
+		}
+	}
 	files, total, err := scanLocalDownloadFiles(localFolder, downloadSettings.MinVideoSizeBytes)
 	if err != nil {
 		return err
 	}
+	// The Xunlei kernel may need a moment to rename .xltd files after it
+	// reports completion.
+	for attempt := 0; len(files) == 0 && finalStatus != nil && attempt < 15; attempt++ {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+		files, total, err = scanLocalDownloadFiles(localFolder, downloadSettings.MinVideoSizeBytes)
+		if err != nil {
+			return err
+		}
+	}
 	if len(files) == 0 {
 		return errors.New("the local download contains no files")
 	}
-	return db.Default().CompleteDownloadJob(ctx, job.ID, files, total, "")
+	if err := db.Default().CompleteDownloadJob(ctx, job.ID, files, total, ""); err != nil {
+		return err
+	}
+	if inLibrary {
+		largest := largestFile(files)
+		_ = db.Default().UpdateDownloadJob(ctx, job.ID, map[string]any{
+			"moved_path": largest, "move_status": "moved", "move_error": "",
+		})
+	}
+	return nil
+}
+
+func firstMediaDirectory(ctx context.Context) (string, error) {
+	dirs, err := db.Default().ListDirectories(ctx)
+	if err != nil {
+		return "", err
+	}
+	for index := range dirs {
+		dir := dirs[index]
+		if dir.IsDelete || !dir.Enabled {
+			continue
+		}
+		if strings.TrimSpace(dir.Path) != "" {
+			return dir.Path, nil
+		}
+	}
+	return "", errors.New("no media directory")
+}
+
+func largestFile(files []string) string {
+	largest := ""
+	var size int64
+	for _, file := range files {
+		info, err := os.Stat(file)
+		if err != nil || info.IsDir() {
+			continue
+		}
+		if info.Size() > size {
+			largest, size = file, info.Size()
+		}
+	}
+	return largest
 }
 
 func localDownloadStatus(ctx context.Context, client downloader.LocalClient, taskID string) (*downloader.LocalStatus, error) {
@@ -495,7 +582,7 @@ func waitForLocalDownload(
 	taskID string,
 	directory string,
 	infoHash string,
-) error {
+) (*downloader.LocalStatus, error) {
 	deadline := time.Now().Add(offlineDownloadMaxWait)
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -508,18 +595,18 @@ func waitForLocalDownload(
 
 	for {
 		if time.Now().After(deadline) {
-			return errors.New("local download timed out")
+			return nil, errors.New("local download timed out")
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil, ctx.Err()
 		case <-ticker.C:
 			status, err := localDownloadStatus(ctx, client, taskID)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if err := updateLocalProgress(ctx, jobID, status); err != nil {
-				return err
+				return nil, err
 			}
 			if status.TotalBytes > 0 {
 				hydrationAttempted = true
@@ -543,13 +630,13 @@ func waitForLocalDownload(
 			}
 			switch status.State {
 			case downloader.OfflineComplete:
-				return nil
+				return status, nil
 			case downloader.OfflineFailed, downloader.OfflineCanceled:
 				message := strings.TrimSpace(status.Message)
 				if message == "" {
 					message = "local download failed"
 				}
-				return errors.New(message)
+				return nil, errors.New(message)
 			}
 		}
 	}
@@ -603,7 +690,7 @@ func scanLocalDownloadFiles(root string, minSize int64) ([]string, int64, error)
 			return nil
 		}
 		name := strings.ToLower(entry.Name())
-		if strings.HasSuffix(name, ".aria2") || strings.HasSuffix(name, ".part") || strings.HasSuffix(name, ".!qb") {
+		if strings.HasSuffix(name, ".aria2") || strings.HasSuffix(name, ".part") || strings.HasSuffix(name, ".!qb") || strings.HasSuffix(name, ".xltd") {
 			return nil
 		}
 		info, infoErr := entry.Info()

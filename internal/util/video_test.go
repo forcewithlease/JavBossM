@@ -96,6 +96,22 @@ func TestIsVideoCandidateUsesKnownExtensionWithoutAcceptingText(t *testing.T) {
 	}
 }
 
+func TestIsVideoCandidateRejectsDownloadPartials(t *testing.T) {
+	tests := []string{"movie.mp4.xltd", "movie.mkv.aria2", "movie.mp4.part", "movie.mp4.!qb"}
+	for _, name := range tests {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), name)
+			content := makeMPEGTransportStreamHeader(188, 0)
+			if err := os.WriteFile(path, content, 0o600); err != nil {
+				t.Fatalf("write partial fixture: %v", err)
+			}
+			if IsVideoCandidate(path) {
+				t.Fatalf("%s should not be a video candidate", name)
+			}
+		})
+	}
+}
+
 func TestIsVideoRecognizesRMVBRealMediaSignature(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sample.rmvb")
 	if err := os.WriteFile(path, append([]byte(".RMF\x00\x00\x00\x12"), make([]byte, 32)...), 0o644); err != nil {

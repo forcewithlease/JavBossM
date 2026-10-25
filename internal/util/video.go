@@ -73,10 +73,27 @@ func (m *VideoMetadata) FingerprintV2(size int64) string {
 // video-stream validation. Known video extensions are accepted as candidates so
 // uncommon or newer container signatures are not filtered out prematurely.
 func IsVideoCandidate(path string) bool {
+	if isDownloadPartial(path) {
+		return false
+	}
 	if hasVideoExtension(filepath.Ext(path)) {
 		return true
 	}
 	return IsVideo(path)
+}
+
+// isDownloadPartial reports whether a file is an in-progress download or a
+// downloader control file. Xunlei writes the real media into a .xltd file
+// (for example movie.mp4.xltd) while downloading, so scanning it as a video
+// would create a broken library entry that disappears when the task finishes.
+func isDownloadPartial(path string) bool {
+	name := strings.ToLower(filepath.Base(path))
+	for _, suffix := range []string{".xltd", ".aria2", ".part", ".!qb", ".crdownload", ".download"} {
+		if strings.HasSuffix(name, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsVideo detects video content by inspecting the initial bytes and matching

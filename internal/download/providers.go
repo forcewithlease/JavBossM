@@ -15,6 +15,7 @@ import (
 	"javboss/internal/download/downloader"
 	downloaderaria2 "javboss/internal/download/downloader/aria2"
 	downloaderqbittorrent "javboss/internal/download/downloader/qbittorrent"
+	downloaderxunlei "javboss/internal/download/downloader/xunlei"
 	"javboss/internal/models"
 )
 
@@ -37,6 +38,7 @@ var providerDefaults = map[string]string{
 	models.DownloaderProviderCloudDrive2: "http://127.0.0.1:19798",
 	models.DownloaderProviderAria2:       "http://127.0.0.1:6800",
 	models.DownloaderProviderQBittorrent: "http://127.0.0.1:8080",
+	models.DownloaderProviderXunlei:      "http://127.0.0.1:2345/webman/3rdparty/pan-xunlei-com/index.cgi",
 }
 
 // DetectProviders probes reachable downloaders and returns them in a stable
@@ -52,6 +54,7 @@ func DetectProviders(ctx context.Context) ([]ProviderInfo, string) {
 		{ID: models.DownloaderProviderCloudDrive2, Kind: "cloud", Implemented: true},
 		{ID: models.DownloaderProviderAria2, Kind: "local", Implemented: true},
 		{ID: models.DownloaderProviderQBittorrent, Kind: "local", Implemented: true},
+		{ID: models.DownloaderProviderXunlei, Kind: "local", Implemented: true},
 	}
 	var wg sync.WaitGroup
 	for i := range providers {
@@ -73,6 +76,8 @@ func DetectProviders(ctx context.Context) ([]ProviderInfo, string) {
 				detectAria2(probeCtx, provider, stored)
 			case models.DownloaderProviderQBittorrent:
 				detectQBittorrent(probeCtx, provider, stored)
+			case models.DownloaderProviderXunlei:
+				detectXunlei(probeCtx, provider, stored)
 			}
 		}()
 	}
@@ -150,6 +155,32 @@ func detectQBittorrent(ctx context.Context, provider *ProviderInfo, stored *mode
 	}
 }
 
+func detectXunlei(ctx context.Context, provider *ProviderInfo, stored *models.DownloaderProviderSettings) {
+	username, password := "", ""
+	if stored != nil {
+		username, password = stored.Username, stored.APIToken
+	}
+	client, err := downloaderxunlei.New(provider.Address, username, password)
+	if err != nil {
+		provider.Message = err.Error()
+		return
+	}
+	result, err := client.Test(ctx)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "authentication") {
+			provider.Detected = true
+			provider.RequiresAuth = true
+			return
+		}
+		provider.Message = "unreachable"
+		return
+	}
+	provider.Detected = true
+	if result != nil {
+		provider.Version = result.UserName
+	}
+}
+
 func openLocalClient(settings *models.DownloaderProviderSettings) (downloader.LocalClient, error) {
 	if settings == nil {
 		return nil, errors.New("downloader settings are missing")
@@ -163,6 +194,8 @@ func openLocalClient(settings *models.DownloaderProviderSettings) (downloader.Lo
 		return downloaderaria2.New(address, strings.TrimSpace(settings.APIToken))
 	case models.DownloaderProviderQBittorrent:
 		return downloaderqbittorrent.New(address, settings.Username, settings.APIToken)
+	case models.DownloaderProviderXunlei:
+		return downloaderxunlei.New(address, settings.Username, settings.APIToken)
 	default:
 		return nil, fmt.Errorf("unsupported local downloader %q", settings.Provider)
 	}

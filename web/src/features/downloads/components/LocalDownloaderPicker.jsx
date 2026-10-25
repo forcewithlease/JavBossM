@@ -32,6 +32,19 @@ const PROVIDER_META = {
       'Local Web API downloader writing straight into the download directory'
     ),
   },
+  xunlei: {
+    label: zh('迅雷 NAS（内测）', 'Xunlei NAS (beta)'),
+    description: zh(
+      '服务器端迅雷内核，直接下载到媒体目录',
+      'Server-side Xunlei kernel that downloads straight into the media directory'
+    ),
+  },
+}
+
+const defaultAddresses = {
+  aria2: 'http://127.0.0.1:6800',
+  qbittorrent: 'http://127.0.0.1:8080',
+  xunlei: 'http://127.0.0.1:2345/webman/3rdparty/pan-xunlei-com/index.cgi',
 }
 
 export default function LocalDownloaderPicker({ activeProvider, onChanged, onToast }) {
@@ -77,10 +90,10 @@ export default function LocalDownloaderPicker({ activeProvider, onChanged, onToa
     try {
       const payload = await fetchDownloaderProvider(provider)
       setConfig({
-        address: payload?.address || '',
+        address: payload?.address || defaultAddresses[provider] || '',
         username: payload?.username || '',
         apiToken: '',
-        remoteFolder: payload?.remote_folder || '',
+        remoteFolder: payload?.remote_folder || (provider === 'xunlei' ? '/xunlei/AV' : ''),
       })
       setConfigLoaded(true)
     } catch {
@@ -300,11 +313,11 @@ export default function LocalDownloaderPicker({ activeProvider, onChanged, onToa
                 onChange={(event) =>
                   setConfig((current) => ({ ...current, address: event.target.value }))
                 }
-                placeholder={active === 'aria2' ? 'http://127.0.0.1:6800' : 'http://127.0.0.1:8080'}
+                placeholder={defaultAddresses[active] || ''}
                 className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
               />
             </label>
-            {active === 'qbittorrent' ? (
+            {active === 'qbittorrent' || active === 'xunlei' ? (
               <>
                 <label className="flex flex-col gap-1 text-xs font-medium text-gray-600">
                   {zh('用户名', 'Username')}
@@ -348,16 +361,22 @@ export default function LocalDownloaderPicker({ activeProvider, onChanged, onToa
               </label>
             )}
             <label className="flex flex-col gap-1 text-xs font-medium text-gray-600 sm:col-span-2">
-              {zh('下载器写入目录', 'Downloader directory')}
+              {active === 'xunlei'
+                ? zh('迅雷下载根目录', 'Xunlei download root')
+                : zh('下载器写入目录', 'Downloader directory')}
               <input
                 value={config.remoteFolder}
                 onChange={(event) =>
                   setConfig((current) => ({ ...current, remoteFolder: event.target.value }))
                 }
-                placeholder={zh(
-                  '留空则使用上面的下载目录',
-                  'Leave blank to use the download directory above'
-                )}
+                placeholder={
+                  active === 'xunlei'
+                    ? '/xunlei/AV'
+                    : zh(
+                        '留空则使用上面的下载目录',
+                        'Leave blank to use the download directory above'
+                      )
+                }
                 className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
               />
             </label>

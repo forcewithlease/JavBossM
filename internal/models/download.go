@@ -8,6 +8,7 @@ const (
 	DownloaderProviderCloudDrive2       = "clouddrive2"
 	DownloaderProviderAria2             = "aria2"
 	DownloaderProviderQBittorrent       = "qbittorrent"
+	DownloaderProviderXunlei            = "xunlei"
 	DefaultDownloaderProvider           = DownloaderProviderCloudDrive2
 
 	DownloadQueued             = "queued"
@@ -46,7 +47,7 @@ type DownloaderProviderSettings struct {
 // configured directory instead of staging files in a cloud drive.
 func IsLocalDownloader(provider string) bool {
 	switch provider {
-	case DownloaderProviderAria2, DownloaderProviderQBittorrent:
+	case DownloaderProviderAria2, DownloaderProviderQBittorrent, DownloaderProviderXunlei:
 		return true
 	default:
 		return false
@@ -80,4 +81,5 @@ type DownloadJob struct {
 	MovedPath         string     `json:"moved_path" gorm:"type:text;not null;default:''"`
 	MoveStatus        string     `json:"move_status" gorm:"not null;default:''"`
 	MoveError         string     `json:"move_error" gorm:"type:text;not null;default:''"`
+	CleanupStatus     string     `json:"cleanup_status" gorm:"not null;default:''"`
 }

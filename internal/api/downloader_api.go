@@ -266,6 +266,47 @@ func listDownloadJobs(c *gin.Context) {
 	c.JSON(http.StatusOK, jobs)
 }
 
+// listDownloaderTasks returns the active downloader's own task list so tasks
+// added directly in the Xunlei dashboard are visible in JavBoss as well.
+func listDownloaderTasks(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, download.ListDownloaderTasks(c.Request.Context()))
+}
+
+// cleanDownloaderTask removes advertising files from a completed task that was
+// created directly in the downloader UI (for example the Xunlei dashboard).
+func cleanDownloaderTask(c *gin.Context) {
+	taskID := strings.TrimSpace(c.Param("id"))
+	result, err := download.CleanRemoteTask(c.Request.Context(), taskID)
+	if err != nil {
+		message := strings.ToLower(err.Error())
+		switch {
+		case strings.Contains(message, "not found"):
+			respondLocalizedError(c, http.StatusNotFound, "迅雷任务不存在", "Xunlei task not found")
+		case strings.Contains(message, "only completed"):
+			respondLocalizedError(c, http.StatusConflict, "只能清理已完成的迅雷任务", "Only completed Xunlei tasks can be cleaned")
+		case strings.Contains(message, "refusing"), strings.Contains(message, "outside"),
+			strings.Contains(message, "media directory root"):
+			respondLocalizedError(c, http.StatusConflict, "该任务目录不在媒体库中，无法清理", "The task folder is not inside a media directory")
+		case strings.Contains(message, "permission denied"):
+			logging.Error("clean xunlei task %s failed: %v", taskID, err)
+			respondLocalizedError(c, http.StatusInternalServerError,
+				"清理迅雷任务失败：文件权限不足，请确认迅雷下载目录对 JavBoss 可写",
+				"Failed to clean the Xunlei task: permission denied. Make sure the Xunlei download folder is writable by JavBoss.")
+		default:
+			logging.Error("clean xunlei task %s failed: %v", taskID, err)
+			respondLocalizedError(c, http.StatusInternalServerError, "清理迅雷任务失败", "Failed to clean the Xunlei task")
+		}
+		return
+	}
+	if target, targetErr := selectMediaDirectory(c.Request.Context(), 0); targetErr == nil {
+		if scanErr := directory.StartManualDirectoryScan(*target); scanErr != nil {
+			logging.Info("scan after xunlei cleanup skipped directory=%d: %v", target.ID, scanErr)
+		}
+	}
+	c.JSON(http.StatusOK, result)
+}
+
 func createDownloadJob(c *gin.Context) {
 	var request struct {
 		MagnetURL string `json:"magnet_url"`
@@ -428,6 +469,44 @@ func moveDownloadJob(c *gin.Context) {
 	job.MoveStatus = "moving"
 	job.MoveError = ""
 	c.JSON(http.StatusAccepted, job)
+}
+
+// cleanDownloadJob deletes the source download folder after the video has
+// been moved. For Xunlei downloads that land directly in the media directory,
+// it keeps the moved video and its subtitles and removes the advertising and
+// other junk files that came with the torrent.
+func cleanDownloadJob(c *gin.Context) {
+	id, ok := downloadJobID(c)
+	if !ok {
+		return
+	}
+	result, err := download.CleanDownloadDirectory(c.Request.Context(), id)
+	if err != nil {
+		message := strings.ToLower(err.Error())
+		switch {
+		case strings.Contains(message, "not found"):
+			respondLocalizedError(c, http.StatusNotFound, "下载任务不存在", "Download job not found")
+		case strings.Contains(message, "completed"):
+			respondLocalizedError(c, http.StatusConflict, "只能清理已完成的下载", "Only completed downloads can be cleaned")
+		case strings.Contains(message, "move the video"):
+			respondLocalizedError(c, http.StatusConflict, "请先把视频移入媒体库", "Move the video to the media library first")
+		case strings.Contains(message, "permission denied"):
+			logging.Error("clean download job %d failed: %v", id, err)
+			respondLocalizedError(c, http.StatusInternalServerError,
+				"清理下载目录失败：文件权限不足，请确认迅雷下载目录对 JavBoss 可写",
+				"Failed to clean the download folder: permission denied. Make sure the Xunlei download folder is writable by JavBoss.")
+		default:
+			logging.Error("clean download job %d failed: %v", id, err)
+			respondLocalizedError(c, http.StatusInternalServerError, "清理下载目录失败", "Failed to clean the download folder")
+		}
+		return
+	}
+	if target, targetErr := selectMediaDirectory(c.Request.Context(), 0); targetErr == nil {
+		if scanErr := directory.StartManualDirectoryScan(*target); scanErr != nil {
+			logging.Info("scan after cleanup skipped directory=%d: %v", target.ID, scanErr)
+		}
+	}
+	c.JSON(http.StatusOK, result)
 }
 
 func selectMediaDirectory(ctx context.Context, directoryID int64) (*models.Directory, error) {

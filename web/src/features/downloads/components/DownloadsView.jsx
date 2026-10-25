@@ -6,6 +6,7 @@ import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined'
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined'
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined'
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined'
+import DeleteSweepOutlinedIcon from '@mui/icons-material/DeleteSweepOutlined'
 import FolderOpenOutlinedIcon from '@mui/icons-material/FolderOpenOutlined'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlineRounded'
@@ -15,8 +16,11 @@ import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined'
 import AppModal from '@/shared/ui/AppModal'
 import {
   cancelDownloadJob,
+  cleanDownloadJob,
+  cleanDownloaderTask,
   createDownloadJob,
   deleteDownloadJob,
+  fetchDownloaderTasks,
   fetchDownloadJobs,
   moveDownloadJob,
   revealDownloadLocation,
@@ -36,6 +40,34 @@ const statusLabels = {
   completed: ['已完成', 'Completed'],
   failed: ['失败', 'Failed'],
   canceled: ['已取消', 'Canceled'],
+}
+
+const remoteStateLabels = {
+  running: ['下载中', 'Downloading'],
+  pending: ['等待中', 'Pending'],
+  paused: ['已暂停', 'Paused'],
+  complete: ['已完成', 'Completed'],
+  failed: ['失败', 'Failed'],
+}
+
+function remoteStateLabel(state) {
+  const labels = remoteStateLabels[state] || [state, state]
+  return zh(labels[0], labels[1])
+}
+
+function remoteStateBadgeClass(state) {
+  switch (state) {
+    case 'complete':
+      return 'bg-emerald-100 text-emerald-700'
+    case 'failed':
+      return 'bg-red-100 text-red-700'
+    case 'paused':
+      return 'bg-amber-100 text-amber-700'
+    case 'pending':
+      return 'bg-gray-100 text-gray-500'
+    default:
+      return 'bg-blue-100 text-blue-700'
+  }
 }
 
 const DOWNLOAD_PAGE_SIZE = 20
@@ -96,6 +128,7 @@ const providerLabels = {
   clouddrive2: 'CloudDrive2',
   aria2: 'aria2',
   qbittorrent: 'qBittorrent',
+  xunlei: zh('迅雷', 'Xunlei'),
 }
 
 function parentPath(value) {
@@ -187,6 +220,15 @@ export default function DownloadsView({ onToast }) {
   const [submitting, setSubmitting] = useState(false)
   const [busyJobIds, setBusyJobIds] = useState(() => new Set())
   const [error, setError] = useState('')
+  const [remoteTasks, setRemoteTasks] = useState([])
+  const [remoteTaskState, setRemoteTaskState] = useState({
+    provider: '',
+    supported: false,
+    error: '',
+  })
+  const [cleanedJobIds, setCleanedJobIds] = useState(() => new Set())
+  const [cleanedRemoteTaskIds, setCleanedRemoteTaskIds] = useState(() => new Set())
+  const [busyRemoteTaskIds, setBusyRemoteTaskIds] = useState(() => new Set())
 
   useEffect(() => {
     const controller = new AbortController()
@@ -229,6 +271,39 @@ export default function DownloadsView({ onToast }) {
     }
   }, [page, refreshVersion])
 
+  useEffect(() => {
+    const controller = new AbortController()
+    let timer
+    const loadRemoteTasks = async () => {
+      try {
+        const payload = await fetchDownloaderTasks({ signal: controller.signal })
+        if (controller.signal.aborted) return
+        setRemoteTasks(Array.isArray(payload?.tasks) ? payload.tasks : [])
+        setRemoteTaskState({
+          provider: payload?.provider || '',
+          supported: Boolean(payload?.supported),
+          error: payload?.error || '',
+        })
+      } catch (loadError) {
+        if (!controller.signal.aborted) {
+          setRemoteTaskState((current) => ({
+            ...current,
+            error: getErrorMessage(loadError),
+          }))
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          timer = window.setTimeout(loadRemoteTasks, 5000)
+        }
+      }
+    }
+    void loadRemoteTasks()
+    return () => {
+      controller.abort()
+      window.clearTimeout(timer)
+    }
+  }, [refreshVersion])
+
   const refreshJobs = () => setRefreshVersion((current) => current + 1)
   const goToPage = (nextPage) => {
     if (nextPage === page) return
@@ -245,6 +320,62 @@ export default function DownloadsView({ onToast }) {
       refreshJobs()
     } catch (actionError) {
       setError(getErrorMessage(actionError))
+    } finally {
+      setBusyJobIds((current) => {
+        const next = new Set(current)
+        next.delete(job.id)
+        return next
+      })
+    }
+  }
+
+  const handleRemoteCleanup = async (task) => {
+    const taskID = String(task.id || '').trim()
+    if (!taskID) return
+    setBusyRemoteTaskIds((current) => new Set(current).add(taskID))
+    setError('')
+    try {
+      const result = await cleanDownloaderTask(taskID)
+      setCleanedRemoteTaskIds((current) => new Set(current).add(taskID))
+      const removed = Number(result?.removed_files) || 0
+      onToast?.(
+        removed > 0
+          ? zh(
+              `已清理迅雷任务：删除 ${removed} 个文件，释放 ${formatBytes(result?.removed_bytes)}`,
+              `Xunlei task cleaned: removed ${removed} files, freed ${formatBytes(result?.removed_bytes)}`
+            )
+          : zh('迅雷任务已清理', 'Xunlei task cleaned')
+      )
+      setRefreshVersion((current) => current + 1)
+    } catch (cleanupError) {
+      setError(getErrorMessage(cleanupError))
+    } finally {
+      setBusyRemoteTaskIds((current) => {
+        const next = new Set(current)
+        next.delete(taskID)
+        return next
+      })
+    }
+  }
+
+  const handleCleanup = async (job) => {
+    setBusyJobIds((current) => new Set(current).add(job.id))
+    setError('')
+    try {
+      const result = await cleanDownloadJob(job.id)
+      setCleanedJobIds((current) => new Set(current).add(job.id))
+      const removed = Number(result?.removed_files) || 0
+      onToast?.(
+        removed > 0
+          ? zh(
+              `已清理下载目录：删除 ${removed} 个文件，释放 ${formatBytes(result?.removed_bytes)}`,
+              `Download folder cleaned: removed ${removed} files, freed ${formatBytes(result?.removed_bytes)}`
+            )
+          : zh('下载目录已清理', 'Download folder cleaned')
+      )
+      refreshJobs()
+    } catch (cleanupError) {
+      setError(getErrorMessage(cleanupError))
     } finally {
       setBusyJobIds((current) => {
         const next = new Set(current)
@@ -296,6 +427,31 @@ export default function DownloadsView({ onToast }) {
     onToast?.(message)
   }
 
+  const jobRemoteTaskIds = new Set(
+    jobs.map((job) => String(job.remote_task_id || '').trim()).filter(Boolean)
+  )
+  const visibleRemoteTasks = remoteTasks.filter(
+    (task) => !jobRemoteTaskIds.has(String(task.id || ''))
+  )
+  const showRemoteTasks = remoteTaskState.supported && remoteTaskState.provider === 'xunlei'
+  const remoteCounts = visibleRemoteTasks.reduce(
+    (total, task) => {
+      if (task.state === 'complete') total.completed += 1
+      else if (task.state === 'failed') total.failed += 1
+      else total.active += 1
+      return total
+    },
+    { active: 0, completed: 0, failed: 0 }
+  )
+  const remoteTotal = remoteCounts.active + remoteCounts.completed + remoteCounts.failed
+  const summaryCounts = showRemoteTasks
+    ? {
+        active: counts.active + remoteCounts.active,
+        completed: counts.completed + remoteCounts.completed,
+        failed: counts.failed + remoteCounts.failed,
+      }
+    : counts
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div
@@ -308,13 +464,141 @@ export default function DownloadsView({ onToast }) {
           </div>
         ) : null}
 
+        {showRemoteTasks ? (
+          <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-gray-900">
+                  {zh('迅雷下载器任务', 'Xunlei downloader tasks')}
+                </h2>
+                <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                  {visibleRemoteTasks.length}
+                </span>
+              </div>
+              <span className="text-[11px] text-gray-400">
+                {zh(
+                  '面板里直接添加的任务也会显示在这里',
+                  'Tasks added in the Xunlei dashboard appear here too'
+                )}
+              </span>
+            </div>
+            {remoteTaskState.error ? (
+              <p className="mt-2 text-xs text-red-600">{remoteTaskState.error}</p>
+            ) : null}
+            {visibleRemoteTasks.length === 0 ? (
+              <p className="mt-2 text-xs text-gray-400">
+                {zh('迅雷面板暂无下载任务', 'No download tasks in the Xunlei dashboard')}
+              </p>
+            ) : (
+              <div className="mt-2 space-y-2">
+                {visibleRemoteTasks.map((task) => {
+                  const total = Number(task.total_bytes) || 0
+                  const done = Number(task.done_bytes) || 0
+                  const progress =
+                    task.state === 'complete'
+                      ? 100
+                      : total > 0
+                        ? Math.max(0, Math.min(100, (done * 100) / total))
+                        : 0
+                  const speed = formatSpeed(task.speed_bytes)
+                  return (
+                    <div
+                      key={task.id || `${task.name}-${task.created_at}`}
+                      className="rounded-lg border border-gray-100 bg-gray-50/60 p-2.5"
+                    >
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="min-w-0 break-all text-xs font-semibold text-gray-900">
+                          {task.name || task.id}
+                        </span>
+                        <span
+                          className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${remoteStateBadgeClass(task.state)}`}
+                        >
+                          {remoteStateLabel(task.state)}
+                        </span>
+                        <span className="text-[10px] text-gray-400">
+                          {formatTime(task.created_at)}
+                        </span>
+                        {task.state === 'complete' ? (
+                          cleanedRemoteTaskIds.has(String(task.id || '')) ? (
+                            <span className="ml-auto text-[10px] text-gray-400">
+                              {zh('已清理', 'Cleaned')}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={busyRemoteTaskIds.has(String(task.id || ''))}
+                              onClick={() => handleRemoteCleanup(task)}
+                              title={zh(
+                                '删除该任务目录里的广告和残留文件，保留主视频与字幕',
+                                'Delete ads and leftovers in this task folder while keeping the main video and subtitles'
+                              )}
+                              className="ml-auto inline-flex h-6 items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+                            >
+                              <DeleteSweepOutlinedIcon sx={{ fontSize: 13 }} />
+                              {zh('清理广告', 'Clean ads')}
+                            </button>
+                          )
+                        ) : null}
+                      </div>
+                      {task.path ? (
+                        <div
+                          className="mt-0.5 truncate text-[11px] text-gray-400"
+                          title={task.path}
+                        >
+                          {zh('下载位置：', 'Location: ')}
+                          {task.path}
+                        </div>
+                      ) : null}
+                      {total > 0 ? (
+                        <>
+                          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-200">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                task.state === 'complete'
+                                  ? 'bg-emerald-600'
+                                  : task.state === 'failed'
+                                    ? 'bg-red-500'
+                                    : 'bg-blue-600'
+                              }`}
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                          <div className="mt-0.5 flex justify-between text-[11px] text-gray-400">
+                            <span>
+                              {progress.toFixed(1)}%{speed ? ` · ${speed}` : ''}
+                            </span>
+                            <span>
+                              {formatProgressBytes(done)} / {formatBytes(total)}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="mt-1 text-[11px] text-gray-400">
+                          {task.state === 'failed' && task.message
+                            ? task.message
+                            : zh('正在获取元数据…', 'Fetching metadata...')}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+        ) : null}
+
         <section>
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm text-gray-500">
               {zh(
-                `进行中 ${counts.active} · 已完成 ${counts.completed} · 失败 ${counts.failed}`,
-                `${counts.active} active · ${counts.completed} completed · ${counts.failed} failed`
+                `进行中 ${summaryCounts.active} · 已完成 ${summaryCounts.completed} · 失败 ${summaryCounts.failed}`,
+                `${summaryCounts.active} active · ${summaryCounts.completed} completed · ${summaryCounts.failed} failed`
               )}
+              {showRemoteTasks && remoteTotal > 0 ? (
+                <span className="ml-1 text-[11px] text-gray-400">
+                  {zh('（含迅雷面板任务）', '(includes Xunlei tasks)')}
+                </span>
+              ) : null}
             </p>
             <div className="flex shrink-0 items-center gap-1.5">
               <button
@@ -344,10 +628,15 @@ export default function DownloadsView({ onToast }) {
             </div>
           ) : jobs.length === 0 ? (
             <div className="mt-4 rounded-xl border border-dashed border-gray-200 bg-white p-10 text-center text-sm text-gray-400">
-              {zh(
-                '队列为空，请点击上方的新建按钮创建任务',
-                'The queue is empty. Use the create button above to add a job.'
-              )}
+              {showRemoteTasks && visibleRemoteTasks.length > 0
+                ? zh(
+                    'JavBoss 下载队列为空，迅雷面板里的任务显示在上方',
+                    'The JavBoss queue is empty. Xunlei dashboard tasks are shown above.'
+                  )
+                : zh(
+                    '队列为空，请点击上方的新建按钮创建任务',
+                    'The queue is empty. Use the create button above to add a job.'
+                  )}
             </div>
           ) : (
             <div className="mt-3 space-y-2">
@@ -517,13 +806,34 @@ export default function DownloadsView({ onToast }) {
                     {job.status === 'completed' ? (
                       <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
                         {job.moved_path ? (
-                          <span
-                            className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700"
-                            title={displayHostPath(job.moved_path, useHostPaths)}
-                          >
-                            <CheckCircleOutlineRoundedIcon sx={{ fontSize: 14 }} />
-                            {zh('已移入媒体库', 'Moved to library')}
-                          </span>
+                          <>
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700"
+                              title={displayHostPath(job.moved_path, useHostPaths)}
+                            >
+                              <CheckCircleOutlineRoundedIcon sx={{ fontSize: 14 }} />
+                              {zh('已移入媒体库', 'Moved to library')}
+                            </span>
+                            {job.cleanup_status === 'cleaned' || cleanedJobIds.has(job.id) ? (
+                              <span className="text-[11px] text-gray-400">
+                                {zh('下载目录已清理', 'Download folder cleaned')}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => handleCleanup(job)}
+                                title={zh(
+                                  '删除下载目录里的广告和残留文件，保留已移入的视频与字幕',
+                                  'Delete ads and leftovers in the download folder while keeping the moved video and subtitles'
+                                )}
+                                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+                              >
+                                <DeleteSweepOutlinedIcon sx={{ fontSize: 16 }} />
+                                {zh('清理下载目录', 'Clean folder')}
+                              </button>
+                            )}
+                          </>
                         ) : job.move_status === 'moving' ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700">
                             {zh('移动中…', 'Moving...')}

@@ -54,6 +54,28 @@ export async function fetchDownloadJobs({ limit = 20, offset = 0, signal } = {})
   return parseJSONResponse(res)
 }
 
+export async function fetchDownloaderTasks({ signal } = {}) {
+  const res = await apiFetch('/downloader/tasks', { cache: 'no-store', signal })
+  if (!res.ok) throw await apiError(res)
+  return parseJSONResponse(res)
+}
+
+export async function cleanDownloaderTask(id) {
+  const res = await apiFetch(`/downloader/tasks/${encodeURIComponent(id)}/clean`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw await apiError(res)
+  return parseJSONResponse(res)
+}
+
+export async function cleanDownloadJob(id) {
+  const res = await apiFetch(`/downloads/${encodeURIComponent(id)}/clean`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw await apiError(res)
+  return parseJSONResponse(res)
+}
+
 export async function createDownloadJob({ magnetUrl }) {
   const res = await apiFetch('/downloads', {
     method: 'POST',
