@@ -8,7 +8,6 @@ import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined'
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import FolderOpenOutlinedIcon from '@mui/icons-material/FolderOpenOutlined'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
-import BoltRoundedIcon from '@mui/icons-material/BoltRounded'
 import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlineRounded'
 import DriveFileMoveRoundedIcon from '@mui/icons-material/DriveFileMoveRounded'
 import RefreshOutlinedIcon from '@mui/icons-material/RefreshOutlined'
@@ -70,15 +69,6 @@ function formatSpeed(value) {
   const bytes = Number(value)
   if (!Number.isFinite(bytes) || bytes <= 0) return ''
   return `${formatBytes(bytes)}/s`
-}
-
-// Hand the magnet to the local Thunder client. This runs in the browser; the
-// server itself cannot launch a desktop-only client.
-function thunderUrl(magnet) {
-  const bytes = new TextEncoder().encode(`AA${magnet}ZZ`)
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return `thunder://${btoa(binary)}`
 }
 
 function formatTime(value) {
@@ -261,29 +251,6 @@ export default function DownloadsView({ onToast }) {
         next.delete(job.id)
         return next
       })
-    }
-  }
-
-  const openThunder = (magnet) => {
-    const value = String(magnet || '').trim()
-    if (!value) return
-    try {
-      const link = document.createElement('a')
-      link.href = thunderUrl(value)
-      link.rel = 'noopener'
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      onToast?.(
-        zh(
-          '已尝试调用迅雷；未打开请确认本机已安装迅雷',
-          'Tried to open Thunder; install it on this device if nothing happened'
-        )
-      )
-    } catch {
-      onToast?.(
-        zh('无法调用迅雷，请复制磁力链接', 'Could not open Thunder; copy the magnet instead')
-      )
     }
   }
 
@@ -487,18 +454,6 @@ export default function DownloadsView({ onToast }) {
                         >
                           <ContentCopyOutlinedIcon fontSize="inherit" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => openThunder(job.magnet_url)}
-                          aria-label={zh('用迅雷下载', 'Open in Thunder')}
-                          title={zh(
-                            '用本机迅雷下载（不经过服务器）',
-                            'Open in the local Thunder client (not server-side)'
-                          )}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-sky-200 bg-sky-50 text-[16px] text-sky-700 hover:bg-sky-100"
-                        >
-                          <BoltRoundedIcon fontSize="inherit" />
-                        </button>
                         {['failed', 'canceled'].includes(job.status) ? (
                           <button
                             type="button"
@@ -655,8 +610,8 @@ export default function DownloadsView({ onToast }) {
             </div>
             <p className="mt-1 text-sm text-gray-500">
               {zh(
-                '输入磁力链接后，使用当前下载器创建任务；也可以用本机迅雷直接下载。',
-                'Enter a magnet link to use the active downloader, or hand it to the local Thunder client.'
+                '输入磁力链接后，使用当前下载器创建任务并下载到本地。',
+                'Enter a magnet link to create a task with the active downloader and download it locally.'
               )}
             </p>
             {createError ? (
@@ -678,15 +633,6 @@ export default function DownloadsView({ onToast }) {
               />
             </label>
             <div className="mt-5 flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                disabled={!magnetUrl.trim()}
-                onClick={() => openThunder(magnetUrl)}
-                className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-4 text-sm font-semibold text-sky-700 hover:bg-sky-100 disabled:opacity-50"
-              >
-                <BoltRoundedIcon sx={{ fontSize: 18 }} />
-                {zh('用迅雷下载', 'Open in Thunder')}
-              </button>
               <button
                 type="button"
                 disabled={submitting}
