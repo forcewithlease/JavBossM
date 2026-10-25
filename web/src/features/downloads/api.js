@@ -137,3 +137,13 @@ export async function updateDownloaderActiveProvider(provider) {
   if (!res.ok) throw await apiError(res)
   return parseJSONResponse(res)
 }
+
+export async function moveDownloadJob(id, { directoryId } = {}) {
+  const res = await apiFetch(`/downloads/${encodeURIComponent(id)}/move`, {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify(directoryId ? { directory_id: directoryId } : {}),
+  })
+  if (!res.ok) throw await apiError(res)
+  return parseJSONResponse(res)
+}

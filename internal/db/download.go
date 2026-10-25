@@ -345,6 +345,7 @@ func (store *Store) CompleteDownloadJob(ctx context.Context, id int64, files []s
 		"status":           models.DownloadCompleted,
 		"bytes_total":      total,
 		"bytes_downloaded": total,
+		"download_speed":   0,
 		"local_files_json": string(raw),
 		"error_message":    warning,
 		"completed_at":     &now,

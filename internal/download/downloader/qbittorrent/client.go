@@ -165,6 +165,7 @@ type torrentInfo struct {
 	Progress  float64 `json:"progress"`
 	Size      int64   `json:"size"`
 	Completed int64   `json:"completed"`
+	DlSpeed   int64   `json:"dlspeed"`
 }
 
 func (c *Client) Status(ctx context.Context, taskID string) (*downloader.LocalStatus, error) {
@@ -184,7 +185,9 @@ func (c *Client) Status(ctx context.Context, taskID string) (*downloader.LocalSt
 		return &downloader.LocalStatus{State: downloader.OfflineNotFound}, nil
 	}
 	item := items[0]
-	result := &downloader.LocalStatus{TotalBytes: item.Size, DoneBytes: item.Completed}
+	result := &downloader.LocalStatus{
+		TotalBytes: item.Size, DoneBytes: item.Completed, SpeedBytes: item.DlSpeed,
+	}
 	switch item.State {
 	case "error", "missingFiles":
 		result.State = downloader.OfflineFailed

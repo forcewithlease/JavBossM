@@ -8,6 +8,7 @@ type LocalStatus struct {
 	State      OfflineState
 	DoneBytes  int64
 	TotalBytes int64
+	SpeedBytes int64
 	Message    string
 }
 

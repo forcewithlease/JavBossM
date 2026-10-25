@@ -127,6 +127,7 @@ func RegisterRoutes(router gin.IRoutes) {
 	router.GET("/downloads", listDownloadJobs)
 	router.POST("/downloads", createDownloadJob)
 	router.POST("/downloads/:id/retry", retryDownloadJob)
+	router.POST("/downloads/:id/move", moveDownloadJob)
 	router.POST("/downloads/:id/cancel", cancelDownloadJob)
 	router.POST("/downloads/:id/reveal", revealDownloadLocation)
 	router.DELETE("/downloads/:id", deleteDownloadJob)

@@ -484,6 +484,7 @@ func updateLocalProgress(ctx context.Context, jobID int64, status *downloader.Lo
 	}
 	return db.Default().UpdateDownloadJob(ctx, jobID, map[string]any{
 		"bytes_total": status.TotalBytes, "bytes_downloaded": status.DoneBytes,
+		"download_speed": status.SpeedBytes,
 	})
 }
 

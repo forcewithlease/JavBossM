@@ -76,4 +76,8 @@ type DownloadJob struct {
 	CreatedAt         time.Time  `json:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at"`
 	CompletedAt       *time.Time `json:"completed_at"`
+	DownloadSpeed     int64      `json:"download_speed" gorm:"not null;default:0"`
+	MovedPath         string     `json:"moved_path" gorm:"type:text;not null;default:''"`
+	MoveStatus        string     `json:"move_status" gorm:"not null;default:''"`
+	MoveError         string     `json:"move_error" gorm:"type:text;not null;default:''"`
 }

@@ -150,7 +150,7 @@ func (c *Client) Add(ctx context.Context, magnet, directory string) (string, err
 
 func (c *Client) Status(ctx context.Context, taskID string) (*downloader.LocalStatus, error) {
 	raw, err := c.call(ctx, "aria2.tellStatus", []any{taskID, []string{
-		"status", "totalLength", "completedLength", "errorMessage",
+		"status", "totalLength", "completedLength", "downloadSpeed", "errorMessage",
 	}})
 	if err != nil {
 		var rpcErr *rpcError
@@ -166,6 +166,7 @@ func (c *Client) Status(ctx context.Context, taskID string) (*downloader.LocalSt
 		Status          string `json:"status"`
 		TotalLength     string `json:"totalLength"`
 		CompletedLength string `json:"completedLength"`
+		DownloadSpeed   string `json:"downloadSpeed"`
 		ErrorMessage    string `json:"errorMessage"`
 	}
 	if err := json.Unmarshal(raw, &status); err != nil {
@@ -174,6 +175,7 @@ func (c *Client) Status(ctx context.Context, taskID string) (*downloader.LocalSt
 	result := &downloader.LocalStatus{Message: strings.TrimSpace(status.ErrorMessage)}
 	result.TotalBytes, _ = strconv.ParseInt(status.TotalLength, 10, 64)
 	result.DoneBytes, _ = strconv.ParseInt(status.CompletedLength, 10, 64)
+	result.SpeedBytes, _ = strconv.ParseInt(status.DownloadSpeed, 10, 64)
 	switch status.Status {
 	case "complete":
 		result.State = downloader.OfflineComplete

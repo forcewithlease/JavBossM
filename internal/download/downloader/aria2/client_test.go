@@ -36,7 +36,7 @@ func TestClientLifecycle(t *testing.T) {
 		case "aria2.addUri":
 			_, _ = w.Write([]byte(`{"result":"gid-1"}`))
 		case "aria2.tellStatus":
-			_, _ = w.Write([]byte(`{"result":{"status":"complete","totalLength":"100","completedLength":"100"}}`))
+			_, _ = w.Write([]byte(`{"result":{"status":"complete","totalLength":"100","completedLength":"100","downloadSpeed":"42"}}`))
 		case "aria2.forceRemove", "aria2.removeDownloadResult":
 			_, _ = w.Write([]byte(`{"result":"OK"}`))
 		default:
@@ -70,7 +70,7 @@ func TestClientLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
-	if status.State != "complete" || status.DoneBytes != 100 || status.TotalBytes != 100 {
+	if status.State != "complete" || status.DoneBytes != 100 || status.TotalBytes != 100 || status.SpeedBytes != 42 {
 		t.Fatalf("unexpected status: %#v", status)
 	}
 	if err := client.Remove(context.Background(), taskID); err != nil {

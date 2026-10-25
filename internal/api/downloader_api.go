@@ -6,7 +6,9 @@ import (
 	"errors"
 	"io"
 	"javboss/internal/common"
+	"javboss/internal/common/logging"
 	dbpkg "javboss/internal/db"
+	"javboss/internal/directory"
 	"javboss/internal/download"
 	"javboss/internal/download/clouddrive"
 	"javboss/internal/download/downloader"
@@ -360,6 +362,90 @@ func cancelDownloadJob(c *gin.Context) {
 	}
 	download.Cancel(id)
 	c.Status(http.StatusNoContent)
+}
+
+// moveDownloadJob moves the largest video of a completed job into a library
+// directory. The copy runs in the background because it may cross filesystems.
+func moveDownloadJob(c *gin.Context) {
+	id, ok := downloadJobID(c)
+	if !ok {
+		return
+	}
+	var request struct {
+		DirectoryID int64 `json:"directory_id"`
+	}
+	if bindErr := c.ShouldBindJSON(&request); bindErr != nil && !errors.Is(bindErr, io.EOF) {
+		respondLocalizedError(c, http.StatusBadRequest, "移动请求格式不正确", "Invalid move request")
+		return
+	}
+	job, err := dbpkg.Default().GetDownloadJob(c.Request.Context(), id)
+	if err != nil || job == nil {
+		respondLocalizedError(c, http.StatusNotFound, "下载任务不存在", "Download job not found")
+		return
+	}
+	if job.Status != models.DownloadCompleted {
+		respondLocalizedError(c, http.StatusConflict, "只能移动已完成的下载", "Only completed downloads can be moved")
+		return
+	}
+	if job.MoveStatus == "moving" {
+		respondLocalizedError(c, http.StatusConflict, "正在移动文件，请稍候", "The file is already being moved")
+		return
+	}
+	if strings.TrimSpace(job.MovedPath) != "" {
+		respondLocalizedError(c, http.StatusConflict, "该文件已移入媒体库", "The file has already been moved")
+		return
+	}
+	target, err := selectMediaDirectory(c.Request.Context(), request.DirectoryID)
+	if err != nil {
+		respondLocalizedError(c, http.StatusBadRequest, "请先在目录管理中添加媒体目录", "Add a media directory in Directory Management first")
+		return
+	}
+	if err := dbpkg.Default().UpdateDownloadJob(c.Request.Context(), job.ID, map[string]any{
+		"move_status": "moving", "move_error": "",
+	}); err != nil {
+		respondLocalizedError(c, http.StatusInternalServerError, "启动移动任务失败", "Failed to start the move")
+		return
+	}
+
+	go func(jobID int64, directoryModel models.Directory) {
+		moveCtx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
+		defer cancel()
+		movedPath, moveErr := download.MoveLargestVideo(moveCtx, jobID, directoryModel.Path)
+		if moveErr != nil {
+			logging.Error("move download job %d failed: %v", jobID, moveErr)
+			return
+		}
+		logging.Info("moved download job %d to %s", jobID, movedPath)
+		refreshed, loadErr := dbpkg.Default().GetDirectory(context.Background(), directoryModel.ID)
+		if loadErr != nil || refreshed == nil {
+			return
+		}
+		if scanErr := directory.StartManualDirectoryScan(*refreshed); scanErr != nil {
+			logging.Info("scan after move skipped directory=%d: %v", directoryModel.ID, scanErr)
+		}
+	}(job.ID, *target)
+
+	job.MoveStatus = "moving"
+	job.MoveError = ""
+	c.JSON(http.StatusAccepted, job)
+}
+
+func selectMediaDirectory(ctx context.Context, directoryID int64) (*models.Directory, error) {
+	dirs, err := dbpkg.Default().ListDirectories(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for index := range dirs {
+		dir := dirs[index]
+		if dir.IsDelete || !dir.Enabled {
+			continue
+		}
+		if directoryID > 0 && dir.ID != directoryID {
+			continue
+		}
+		return &dir, nil
+	}
+	return nil, errors.New("no media directory")
 }
 
 func revealDownloadLocation(c *gin.Context) {
