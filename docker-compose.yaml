@@ -1,8 +1,8 @@
 services:
   javboss:
-    # 本地构建的后端镜像（官方镜像 + 当前源码编译的 javboss 二进制）
-    # 改回官方镜像：JAVBOSS_DOCKER_IMAGE=ghcr.io/solr159/javboss:latest docker compose up -d
-    image: ${JAVBOSS_DOCKER_IMAGE:-javboss:local-api}
+    # 由本仓库构建的镜像：docker build -t localjav:latest .
+    # 也可用官方镜像：JAVBOSS_DOCKER_IMAGE=ghcr.io/solr159/javboss:latest docker compose up -d
+    image: ${JAVBOSS_DOCKER_IMAGE:-localjav:latest}
     container_name: javboss
     user: "1000:1000"
     network_mode: host
