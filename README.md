@@ -1,250 +1,263 @@
-<h1 align="center">JavBoss</h1>
+<h1 align="center">LocalJav</h1>
 
-<p align="center">本地 JAV/视频 管理一站式解决方案：自动扫描目录视频生成封面截图，识别 JAV 并抓取元数据，提供强大的视频和 JAV 检索功能，并通过内置 mpv 播放器快速播放。</p>
+<p align="center"><strong>自建 JAV 媒体库 · 自动刮削 · 移动端播放 · Docker / NAS 部署</strong></p>
 
 <p align="center">
-  <a href="https://github.com/Solr159/JavBoss/releases"><img alt="Release" src="https://img.shields.io/github/v/release/Solr159/JavBoss?display_name=tag"></a>
-  <a href="https://github.com/Solr159/JavBoss/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/Solr159/JavBoss?style=social"></a>
-  <a href="https://github.com/Solr159/JavBoss/releases"><img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-1E88E5"></a>
-  <a href="https://go.dev/"><img alt="Go" src="https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go&logoColor=white"></a>
+  <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/License-GPL--3.0-blue.svg"></a>
+  <img alt="Go" src="https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go&logoColor=white">
+  <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white">
+  <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-1E88E5">
+  <img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg">
 </p>
 
-## 为什么选择 JavBoss？
+LocalJav 是一个**可自托管的 JAV / 视频媒体库**：自动扫描本地目录、识别番号、抓取 JAV 元数据、生成封面与截图，提供标签、收藏、筛选、瀑布流浏览，以及桌面和移动端浏览器播放。适合在 NAS、家庭服务器或本机上长期运行。
 
-- 零配置开箱即用，小白也能轻松上手。
+本项目基于开源项目 [JavBoss](https://github.com/Solr159/JavBoss) 二次开发，遵循 **GPL-3.0** 协议。相较于上游，本仓库重点增强了**移动端体验**与**本地下载器接入**。
 
-- 横跨 Windows、MacOS、Linux 三大平台，也支持通过 Docker 部署在 NAS 中长期运行。
+> **关键词**：JAV 媒体库、JAV 刮削器、番号识别、JAV 管理、女优管理、自建影音库、NAS 媒体库、Docker 部署、移动端适配、aria2、qBittorrent、CloudDrive2
 
-- 视频扫描、刮削、管理、播放等全链路完全自研，不被第三方软件卡脖子。
+## 目录
 
-- 针对 JAV 场景进行深度定制，体验远超 `JAV刮削器` + `通用媒体库` 的常规组合。
+- [核心特性](#核心特性)
+- [移动端体验](#移动端体验)
+- [下载器](#下载器)
+- [快速开始](#快速开始)
+- [Docker 部署](#docker-部署)
+- [源码开发](#源码开发)
+- [使用流程](#使用流程)
+- [常见问题 FAQ](#常见问题-faq)
+- [数据与备份](#数据与备份)
+- [技术栈](#技术栈)
+- [路线图](#路线图)
+- [贡献](#贡献)
+- [许可证与致谢](#许可证与致谢)
 
-- 可在 `视频` 和 `JAV` 两种运行模式之间自由切换，既是一个专业的 JAV 管理软件，也可作为通用视频管理软件使用。
+## 核心特性
 
-- 深度集成 MPV 播放器，支持播放进度条预览，视频截图书签等高级功能。
+- **自动扫描与增量同步**：监控本地目录，新增、删除、移动视频后自动同步媒体库，无需手动整理。
+- **番号识别与元数据刮削**：从文件名识别 JAV 番号，抓取标题、女优、片商、系列、发行日期、时长、标签和封面。
+- **JAV 资料库**：按女优、片商、系列、番号前缀、标签、喜爱度筛选，支持收藏夹与自定义标签。
+- **视频媒体库**：按目录聚合视频，生成缩略图与截图，支持时长、分辨率、体积、观看进度展示。
+- **多种浏览方式**：网格与瀑布流两种模式，无限滚动，分页与排序规则可配置。
+- **网页播放**：内置浏览器播放器，支持 HLS / 直链、断点续播、播放列表、倍速、截图。
+- **桌面播放器集成**：Client 模式下可调用本机 MPV，支持进度条预览等桌面能力。
+- **移动端适配**：底部标签栏、搜索与筛选融合、默认瀑布流、B 站风格手势播放器。
+- **本地下载器**：自动检测 aria2 / qBittorrent，未配置时回退到默认的 CloudDrive2 云盘离线下载。
+- **数据自持**：所有元数据与封面保存在独立数据目录，不修改你的视频文件。
+- **多平台**：Windows、Linux、macOS 原生运行，也支持 Docker / NAS 长期部署。
 
-- 接入 CloudDrive2 api，配合自带的 Chrome 扩展可实现任意网站点击磁力链接直接下载到本地。
+## 移动端体验
 
-- 零侵入式设计，运行数据单独存放，充分尊重用户视频目录，不做任何修改。
+手机与平板通过浏览器访问同一实例即可，无需安装 App。
 
-- 简单直观的 UI 设计，基本不需要任何使用文档，打开就知道怎么用。
+- **底部标签栏**：视频、JAV、女优、片商、系列一键切换，更多入口收纳在底部抽屉。
+- **搜索与筛选融合**：顶部搜索框与筛选按钮合并为一个控件，收藏夹、喜爱度、女优筛选在顶部展开。
+- **默认瀑布流**：移动端首次进入即使用瀑布流与无限滚动，不再显示拥挤的瀑布流开关。
+- **B 站风格播放器**：
+  - 单击显示 / 隐藏控制层，自动隐藏
+  - 双击左 / 右 10 秒快退 / 快进
+  - 左半屏上下滑调亮度，右半屏上下滑调音量
+  - 长按 2 倍速，松手恢复
+  - 底部进度条、倍速面板、选集抽屉、全屏
+- **全屏管理页**：设置、下载等管理弹窗在手机上以全屏方式呈现。
 
-> **作者比较懒，不喜欢写文档，实际上此软件还有批量删除视频、手动刮削、目录整理、导出 nfo 和封面等高级功能，请用户使用过程中自行挖掘。**
+## 下载器
+
+下载设置路径：**下载 → 下载设置 → 下载器**。
+
+| 下载器 | 类型 | 说明 |
+| --- | --- | --- |
+| CloudDrive2 | 云盘离线 | 默认下载器。云端离线完成后回传到本地下载目录，需要地址与 API Token。 |
+| aria2 | 本地 | 自动检测 `127.0.0.1:6800`，通过 JSON-RPC 添加任务，直接写入下载目录。支持 RPC 密钥。 |
+| qBittorrent | 本地 | 自动检测 `127.0.0.1:8080`，通过 Web API 添加任务，直接写入下载目录。支持用户名 / 密码。 |
+
+工作方式：
+
+1. 打开下载设置，程序会自动探测本机正在运行的下载器。
+2. 选择要使用的下载器；未选择时使用默认下载器（CloudDrive2）。
+3. 本地下载器需要能写入「本地下载目录」。如果下载器运行在容器或另一台机器上，请在「下载器写入目录」中填写它对同一块磁盘的挂载路径。
+4. 下载完成后，LocalJav 会扫描任务目录并记录文件，无需再次搬运。
+
+> **关于迅雷**：迅雷没有稳定的 Linux 远程控制接口，因此本项目暂不支持直接调用迅雷。当前可用的本地下载器为 aria2 与 qBittorrent。
 
 ## 快速开始
 
-### 1. 选择安装方式
+### 环境要求
 
-#### 方式一：命令行一键安装
+- Go 1.25+
+- Node.js 24+（仅前端构建）
+- Docker（可选）
+- FFmpeg（可选，HLS 转码与截图增强）
 
-<dl>
-<dd>
+### 默认账号
 
-Windows PowerShell：
+- 用户名：`admin`
+- 初始密码：`admin`（首次登录后请立即在 **设置 → 安全** 中修改）
 
-```powershell
-irm https://raw.githubusercontent.com/Solr159/JavBoss/main/scripts/install.ps1 | iex
-```
+### 默认端口
 
-Linux / macOS：
+- 源码运行：`17654`
+- Docker 示例：`8655`（可通过 `-port` 参数修改）
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/Solr159/JavBoss/main/scripts/install.sh | bash
-```
+## Docker 部署
 
-安装脚本会自动下载对应系统的最新版发布包，完成安装后启动 JavBoss。
-
-以后每次打开：
-
-- Windows：双击桌面的 `JavBoss` 快捷方式，或在开始菜单中搜索 `JavBoss`。
-- Linux / macOS：打开终端运行 `javboss`。
-
-<details>
-<summary>点击查看默认安装位置</summary>
-
-- Windows：`C:\Users\你的用户名\AppData\Local\JavBoss` （右键点击桌面快捷方式 -> 属性 -> 打开文件所在位置 即可快速定位）
-- Linux：`~/.local/share/javboss`
-- macOS：`~/Applications/JavBoss`
-
-</details>
-
-</dd>
-</dl>
-
-#### 方式二：手动下载
-
-<dl>
-<dd>
-
-点击下载对应系统的最新版发布包并解压：
-
-- [Windows](https://github.com/Solr159/JavBoss/releases/download/v2.1.3/javboss-v2.1.3-windows-x86_64.zip)
-- [Linux](https://github.com/Solr159/JavBoss/releases/download/v2.1.3/javboss-v2.1.3-linux-x86_64.zip)
-- [macOS-x86_64](https://github.com/Solr159/JavBoss/releases/download/v2.1.3/javboss-v2.1.3-macos-x86_64.zip)（适用于 Intel 芯片的 macOS）
-- [macOS-arm64](https://github.com/Solr159/JavBoss/releases/download/v2.1.3/javboss-v2.1.3-macos-arm64.zip)（适用于 M 芯片的 macOS）
-
-也可以前往 [Releases](https://github.com/Solr159/JavBoss/releases) 页面查看所有版本。
-
-下载解压后启动程序：
-
-- Windows：双击 `javboss.exe`。首次运行可能会被 SmartScreen 阻止，点击“更多信息” -> “仍要运行”。
-- macOS：打开终端运行 `javboss.command`。
-- Linux：打开终端运行 `javboss`。
-
-</dd>
-</dl>
-
-#### 方式三：Docker 部署
-
-<dl>
-<dd>
-
-docker-compose.yaml（建议放在单独的目录中）：
+推荐使用 Docker Compose。以下示例将视频目录、数据目录和前端构建产物挂载到容器：
 
 ```yaml
 services:
-  javboss:
-    image: ghcr.io/solr159/javboss:latest
-    container_name: javboss
+  localjav:
+    image: localjav:latest
+    container_name: localjav
+    user: "1000:1000"
     network_mode: host
     command: ["./javboss", "-port", "8655"]
     environment:
       JAVBOSS_PROXY_HOST_GATEWAY: "0"
+      JAVBOSS_HOST_PATH_PREFIX: "1"
+      TZ: Asia/Shanghai
     volumes:
       - ./data:/app/data
-      - /:/host
+      # 宿主机路径 -> 容器内 /host 下的同路径
+      - /path/to/media:/host/path/to/media
+      - ./web/dist:/app/web/dist:ro
     restart: unless-stopped
 ```
-**v2.1.0 版本此 yaml 文件有所变化，老用户请即时更新**
-
-启动：
 
 ```bash
+# 1. 构建镜像（在仓库根目录）
+docker build -t localjav:latest .
+
+# 2. 构建前端（如不使用镜像内置前端）
+cd web && npm ci && npm run build && cd ..
+
+# 3. 启动
 docker compose up -d
 ```
 
-添加目录时直接填写宿主机路径，例如 `/mnt/disk1/videos`，程序会自动映射到容器内可访问路径。
+打开 `http://<服务器 IP>:8655`，使用 `admin / admin` 登录。
 
-Docker 部署下默认只能使用网页播放器，如需使用 MPV 可参考[Client 模式](#client-模式)。
+**路径说明**：程序以 `/host` 为宿主机根目录。添加目录时直接填写宿主机路径，例如 `/path/to/media`，程序会自动映射到容器内的 `/host/path/to/media`。请确保 compose 中按相同路径挂载。
 
+> 只想先体验？可以将 `image` 换成上游官方镜像 `ghcr.io/solr159/javboss:latest`，但那样不包含本仓库的移动端与本地下载器改动。
 
-</dd>
-</dl>
-
-</br>
-
-**浏览器访问地址：`http://localhost:8655`，登录密码为 `admin`，可在`设置`->`安全`中修改。</br>**
-**Docker 部署默认支持局域网设备访问，其他部署方式可在`设置`->`网络与代理`中手动开启。</br>**
-**Windows 启动后程序位于右下角系统托盘中，macOS 启动后程序位于顶部菜单栏。**
-
-### 2. 添加本地目录
-
-点击左下角`设置` -> `目录管理`，添加存放视频的本地文件夹。
-
-视频扫描入库、封面截图生成、JAV 刮削会在后台持续运行，刷新页面或点击侧边栏视频、JAV 等选项查看当前进度。
-
-**注意事项：**
-  - 能够正常访问外网是获取 JAV 数据的前提。
-  - JavBoss 只会读取不会主动修改目录里的任何内容，请放心添加。
-  - 你可以随时关闭应用程序，下次打开所有任务会自动重启。
-  - JAV 模式下的女优详情、厂商、系列等信息会逐渐补齐，请耐心等待（补齐速度：女优≈厂商>系列）。
-
-## 目录扫描和 JAV 刮削说明
-
-程序默认会自动持续对目录进行扫描，扫描过程中同步进行 JAV 刮削，相邻两次扫描间隔为1分钟。
-
-可以在 `设置` -> `目录管理` -> `扫描设置` 中修改相邻扫描间隔或关闭自动扫描。也可点击 `手动扫描` 立刻触发一次目录扫描和 JAV 刮削。
-
-一旦目录内容发生任何变化（比如有新视频入库、旧视频被删除、视频移动等），需要再进行一次目录扫描和 JAV 刮削完成内容的更新同步，请根据个人的扫描设置自行把握扫描时机。
-
-对于通过 docker 部署在 NAS 中长期运行的用户，建议调大扫描间隔或者关闭自动扫描，避免影响硬盘寿命。
-
-**请注意一次扫描并不能保证所有可刮削的视频都被成功刮削，原因是每次扫描过程中每个视频只会尝试一次刮削，可能会因为网络抖动或者网站风控等原因导致部分请求失败，个人实测每次扫描约1%左右的视频会刮削失败，需要再扫描一次。**
-
-## Chrome 扩展说明
-
-`JavBoss 助手` 是随程序包一起发布的可选 Chrome 扩展，目前支持以下功能：
-
-- **手动刮削辅助回填**：手动刮削时可点击跳转外部网站，进入影片详情页后，点击页面右下角的“回填到 JavBoss”，即可自动提取影片信息，返回 JavBoss 检查并保存。
-- **JavDB 辅助跳转**：在各个卡片中点击 JavDB 图标，可直接跳转到对应详情页。此功能默认开启，关闭后跳转到搜索页。
-- **显示已拥有状态**：在外部网站的影片列表和详情页标记“已拥有”，此功能默认开启，可在扩展中关闭。
-- **磁力下载**：开启扩展中的“启用磁力下载”后，在任意网页点击磁力链接，确认即可提交到 JavBoss 下载队列，通过 CloudDrive2 创建云端离线任务并下载到本地。使用前需在 JavBoss 的“下载”→“下载设置”中配置 CloudDrive2 和本地下载目录。
-
-**连接设置：**`显示已拥有状态`和`磁力下载`需要先连接 JavBoss：
-
-1. 在 JavBoss 的“全局设置”→“安全”→“浏览器扩展 API 令牌”中新建令牌并复制。
-2. 点击浏览器工具栏中的“JavBoss 助手”，在“连接设置”中填写 JavBoss 访问地址和 API 令牌，点击“测试连接”确认可用。
-3. 按需开启功能，设置修改后自动保存。
-
-扩展不是必须的，有以上需要的可[点击此处](https://github.com/Solr159/JavBoss/releases/download/v2.1.1/javboss-browser-extension-v0.14.1.zip)下载。
-
-
-## 如何升级版本
-
-#### 一键安装用户
-
-先退出正在运行的 JavBoss，然后重新执行一键安装命令即可升级。
-
-#### 手动下载用户
-
-下载并解压新版本后，将旧版本目录中的 `data/` 文件夹复制到新版本目录，然后启动新版本。
-
-#### Docker 用户
-
-进入 `docker-compose.yaml` 所在目录，拉取新镜像并重启：
+## 源码开发
 
 ```bash
-docker compose pull
-docker compose up -d
+# 后端（默认 17654，会自动托管 web/dist）
+GOCACHE=$(pwd)/.gocache go run ./cmd/server
+
+# 前端热更新
+cd web
+npm install
+npm run dev
 ```
 
+前端开发时默认把接口代理到 `http://localhost:17654`。如果后端跑在 Docker 的 `8655` 端口：
 
-## Client 模式
-
-**备注：此模式的目的是让用户在远程访问 JavBoss 时，可以使用本地的 MPV 播放器（比如 JavBoss 通过 docker 部署在 NAS 中，在某个局域网 PC 里访问）。**
-
-Client 模式可以让本机的 JavBoss 充当远程 JavBoss 的反向代理，浏览远程媒体库并使用本机 MPV 播放视频，同时支持本地播放器设置及截图自动同步。
-
-使用此模式需要在本地安装 JavBoss，然后在程序目录的 `config.toml` 中设置远程 JavBoss Server 地址，之后正常启动 JavBoss 即可：
-
-```toml
-server_url = "http://192.168.1.100:8655"
+```bash
+cd web
+JAVBOSS_API_TARGET=http://127.0.0.1:8655 npm run dev -- --host 0.0.0.0
 ```
 
-也可以通过加上命令行临时参数 `--server-url http://192.168.1.100:8655` 启动。
+手机访问 `http://<电脑局域网 IP>:5173` 即可调试移动端。
 
-## Q&A
+### 测试与检查
 
-- Q: 使用时要一直确保外网访问通畅吗？
-- A: JavBoss 所有的信息读取来源于 `data/` 目录，已经看到的信息都是永远离线可用的。无法访问外网意味着 JavBoss 无法做后续的 JAV 信息的抓取和更新，已入库的信息不受影响。
+```bash
+# 后端
+GOCACHE=$(pwd)/.gocache go test ./...
 
-<br>
+# 前端
+cd web
+npm run lint
+npm run format:check
+npm test
+npm run build
+```
 
-- Q: 新下载的视频怎么入库？想删除一些视频怎么办？
-- A: 直接在目录里面操作，然后需要重新触发一次扫描，参考上方的 `目录扫描和 JAV 刮削说明`。
+## 使用流程
 
-<br>
+1. 打开 **设置 → 目录管理**，添加存放视频的本地文件夹。
+2. 等待自动扫描完成；也可以在目录卡片上点击「手动扫描」立即触发。
+3. 在 **视频** 或 **JAV** 页面浏览媒体库，点击卡片查看详情或播放。
+4. 在 **下载** 页面粘贴磁力链接，选择下载器与下载目录。
+5. 需要局域网访问时，在 **设置 → 网络与代理** 中确认已允许局域网访问（Docker 部署默认开启）。
 
-- Q: 目录整理或者文件重命名之后重新扫描，会导致视频卡片的标签和播放次数等信息丢失吗？
-- A: 不会，这些信息是绑定的视频文件唯一指纹，只要还是同一个文件就不会丢失。
+## 常见问题 FAQ
 
-<br>
+### JAV 刮削失败 / 超时怎么办？
 
-- Q: 换电脑时怎么迁移？
-- A: 在新电脑下载对应系统的 `javboss`，然后将旧电脑的`data/`目录复制到新电脑的 `javboss` 目录下即可。（如果视频目录路径也发生了变化，请在目录管理中点击编辑进行调整）
+刮削依赖外部站点。如果所在网络无法直接访问，请在 **设置 → 网络与代理** 配置 HTTP 代理。Docker 部署时，若代理运行在宿主机，可填写 `127.0.0.1:7890`（`network_mode: host`）或使用 `host.docker.internal`。每次扫描只尝试一次，失败后重新扫描即可。
 
-<br>
+### 手机打不开页面？
 
-- Q: 怎么修改启动端口？
-- A: 找到程序目录里的 `config.toml` 文件，修改其中 port 的值更换启动端口。
+- 确认手机和服务器在同一局域网。
+- 使用服务器的局域网 IP（例如 `http://192.168.1.10:8655`），而不是 `localhost`。
+- 检查防火墙是否放行端口。
+- Docker 部署默认允许局域网访问；源码运行需在设置中手动开启。
 
-## 开发者文档
+### Docker 容器里看不到移动硬盘？
 
-开发环境、常用命令及项目结构请参阅 [DEVELOPMENT.md](DEVELOPMENT.md)。
+需要把宿主机目录挂载到容器的 `/host` 下，并保持路径一致：
 
-## 风险提示与免责声明
+```yaml
+volumes:
+  - /media/disk/AV:/host/media/disk/AV
+```
 
-- 本项目是本人在学习 Go 语言期间开发的练手项目，仅供学习与交流。
-- 使用本项目时，请遵守所在国家或地区的法律法规。
-- 请勿将本项目用于任何商业用途。
-- 用户应自行承担使用本项目产生的一切后果，开发者不对用户的任何使用行为承担法律责任。
+移动硬盘重新插拔后，如果挂载点变化，请同步修改 compose 并重新扫描。
+
+### 为什么媒体库突然空了？
+
+如果视频目录被卸载或暂时不可访问，自动扫描会把对应文件标记为移除（JAV 元数据仍然保留）。重新挂载目录后执行一次手动扫描即可恢复。
+
+### 支持迅雷吗？
+
+暂不支持。迅雷缺少稳定的跨平台远程控制接口，目前可接入 aria2、qBittorrent 和 CloudDrive2。
+
+### 下载速度慢 / 没有速度？
+
+本地下载器的速度取决于种子健康度、网络和下载器自身配置。qBittorrent 首次使用请在下载器内确认监听端口和连接数。
+
+### 端口被占用？
+
+修改启动参数 `-port 端口号`，或调整 compose 中的端口与 `command`。
+
+## 数据与备份
+
+- 数据目录默认是程序目录下的 `data/`（Docker 中为 `/app/data`）。
+- 包含 SQLite 数据库、封面、缩略图、截图与缓存。
+- 备份时直接复制整个数据目录即可；视频文件不会被修改。
+- 升级前建议先停止容器并备份数据目录。
+
+## 技术栈
+
+- **后端**：Go、Gin、GORM、SQLite、goose
+- **前端**：React 18、Vite、Tailwind CSS、MUI、Zustand、video.js
+- **媒体**：FFmpeg、HLS、MPV（桌面 Client 模式）
+- **部署**：Docker、Docker Compose、多平台二进制
+
+## 路线图
+
+- [x] 移动端布局与底部导航
+- [x] B 站风格移动端播放器（手势、倍速、选集）
+- [x] 本地下载器自动检测（aria2 / qBittorrent）
+- [ ] 更多下载器适配（Transmission 等）
+- [ ] 播放器更多清晰度与字幕控制
+- [ ] 移动端离线缓存（PWA）
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request。
+
+- 提交前请运行 `gofmt`、`npm run lint`、`npm run format:check` 与相关测试。
+- 数据库结构变更请新增 migration，不要修改历史 migration。
+- 前端请按 `src/features/<domain>/` 的领域结构组织代码。
+
+## 许可证与致谢
+
+- 本项目基于 [Solr159/JavBoss](https://github.com/Solr159/JavBoss) 二次开发，原项目版权归原作者所有。
+- 本项目与修改部分同样以 **GNU General Public License v3.0** 发布，详见 [LICENSE](LICENSE)。
+- 分发修改版本时请保留版权声明、许可证文本，并提供对应源码。
+- 使用本项目时请遵守所在国家或地区的法律法规，仅用于个人学习与合法的媒体管理场景。

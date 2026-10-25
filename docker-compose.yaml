@@ -1,0 +1,21 @@
+services:
+  javboss:
+    # 本地构建的后端镜像（官方镜像 + 当前源码编译的 javboss 二进制）
+    # 改回官方镜像：JAVBOSS_DOCKER_IMAGE=ghcr.io/solr159/javboss:latest docker compose up -d
+    image: ${JAVBOSS_DOCKER_IMAGE:-javboss:local-api}
+    container_name: javboss
+    user: "1000:1000"
+    network_mode: host
+    command: ["./javboss", "-port", "8655"]
+    environment:
+      JAVBOSS_PROXY_HOST_GATEWAY: "0"
+      JAVBOSS_HOST_PATH_PREFIX: "1"
+      TZ: Asia/Shanghai
+    volumes:
+      - ./docker-data:/app/data
+      # 移动硬盘 AV 目录：容器内路径 = /host + 宿主机路径
+      - /media/fang/移动硬盘/AV:/host/media/fang/移动硬盘/AV
+      # 本地前端构建产物：开发移动端时直接预览 `web/dist`
+      # 想恢复镜像自带前端，注释掉下面这一行再 `docker compose up -d` 即可
+      - ./web/dist:/app/web/dist:ro
+    restart: unless-stopped
