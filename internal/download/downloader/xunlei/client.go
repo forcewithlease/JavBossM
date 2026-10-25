@@ -117,6 +117,17 @@ func (c *Client) Add(ctx context.Context, magnet, directory string) (string, err
 		return "", err
 	}
 	if status != http.StatusOK {
+		var apiError struct {
+			Error       string `json:"error"`
+			Description string `json:"error_description"`
+		}
+		_ = json.Unmarshal(body, &apiError)
+		if apiError.Error == "task_create_count_limit" {
+			return "", errors.New("xunlei task creation limit reached; wait for the limit to reset or redeem the beta invite code (迅雷账号任务创建次数已达上限，请等限制重置后再试)")
+		}
+		if apiError.Description != "" {
+			return "", fmt.Errorf("xunlei add task failed: %s", apiError.Description)
+		}
 		return "", fmt.Errorf("xunlei add task returned HTTP %d: %s", status, strings.TrimSpace(string(body)))
 	}
 	var response struct {
