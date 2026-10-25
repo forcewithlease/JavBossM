@@ -117,6 +117,59 @@ func TestStatusNotFound(t *testing.T) {
 	}
 }
 
+func TestReplaceWithTorrentKeepsGID(t *testing.T) {
+	t.Parallel()
+	var methods []string
+	var torrentPayload string
+	var options map[string]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Method string `json:"method"`
+			Params []any  `json:"params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+			return
+		}
+		methods = append(methods, request.Method)
+		switch request.Method {
+		case "aria2.addTorrent":
+			for _, param := range request.Params {
+				if text, ok := param.(string); ok && !strings.HasPrefix(text, "token:") {
+					torrentPayload = text
+				}
+				if decoded, ok := param.(map[string]any); ok {
+					options = map[string]string{}
+					for key, value := range decoded {
+						options[key], _ = value.(string)
+					}
+				}
+			}
+			_, _ = w.Write([]byte(`{"result":"gid-1"}`))
+		default:
+			_, _ = w.Write([]byte(`{"result":"OK"}`))
+		}
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL, "")
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	if err := client.ReplaceWithTorrent(context.Background(), []byte("d4:infod4:name4:teste"), "/downloads", "gid-1"); err != nil {
+		t.Fatalf("replace: %v", err)
+	}
+	if len(methods) != 3 || methods[0] != "aria2.forceRemove" || methods[1] != "aria2.removeDownloadResult" || methods[2] != "aria2.addTorrent" {
+		t.Fatalf("unexpected methods: %#v", methods)
+	}
+	if torrentPayload == "" {
+		t.Fatal("torrent payload was not sent")
+	}
+	if options["gid"] != "gid-1" || options["dir"] != "/downloads" {
+		t.Fatalf("unexpected options: %#v", options)
+	}
+}
+
 func TestNewNormalizesAddress(t *testing.T) {
 	t.Parallel()
 	client, err := New("127.0.0.1:6800/", "")

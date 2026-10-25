@@ -3,6 +3,7 @@ package aria2
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -184,6 +185,28 @@ func (c *Client) Status(ctx context.Context, taskID string) (*downloader.LocalSt
 		result.State = downloader.OfflineRunning
 	}
 	return result, nil
+}
+
+// ReplaceWithTorrent swaps a magnet task whose metadata never arrived for the
+// same task backed by a cached .torrent file. The GID is preserved so callers
+// can keep polling the job unchanged.
+func (c *Client) ReplaceWithTorrent(ctx context.Context, data []byte, directory, taskID string) error {
+	if len(data) == 0 || strings.TrimSpace(taskID) == "" {
+		return errors.New("aria2 torrent metadata is empty")
+	}
+	_, _ = c.call(ctx, "aria2.forceRemove", []any{taskID})
+	_, _ = c.call(ctx, "aria2.removeDownloadResult", []any{taskID})
+	options := map[string]string{"gid": taskID, "seed-time": "0"}
+	if strings.TrimSpace(directory) != "" {
+		options["dir"] = directory
+	}
+	_, err := c.call(ctx, "aria2.addTorrent", []any{
+		base64.StdEncoding.EncodeToString(data), []string{}, options,
+	})
+	if err != nil {
+		return fmt.Errorf("add cached torrent: %w", err)
+	}
+	return nil
 }
 
 func (c *Client) Remove(ctx context.Context, taskID string) error {

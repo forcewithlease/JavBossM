@@ -15,6 +15,8 @@ services:
       - ./docker-data:/app/data
       # 移动硬盘 AV 目录：容器内路径 = /host + 宿主机路径
       - /media/fang/移动硬盘1/AV:/host/media/fang/移动硬盘1/AV
+      # 下载目录：aria2 容器挂到 /downloads，JavBoss 通过 /host 下的同一路径访问
+      - /home/fang/data/downloads:/host/home/fang/data/downloads
       # 本地前端构建产物：开发移动端时直接预览 `web/dist`
       # 想恢复镜像自带前端，注释掉下面这一行再 `docker compose up -d` 即可
       - ./web/dist:/app/web/dist:ro

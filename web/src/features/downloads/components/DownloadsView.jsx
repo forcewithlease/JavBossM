@@ -21,6 +21,7 @@ import {
 } from '@/features/downloads/api'
 import { getErrorMessage } from '@/utils/errors'
 import { zh } from '@/utils/i18n'
+import { displayHostPath, hostPathsEnabled } from '@/utils/hostPath'
 import { useStore } from '@/store'
 
 const statusLabels = {
@@ -68,9 +69,18 @@ function formatTime(value) {
   }).format(date)
 }
 
-function statusLabel(status) {
+function statusLabel(status, provider) {
+  if (status === 'offline_downloading' && provider && provider !== 'clouddrive2') {
+    return zh('下载中', 'Downloading')
+  }
   const labels = statusLabels[status] || [status, status]
   return zh(labels[0], labels[1])
+}
+
+const providerLabels = {
+  clouddrive2: 'CloudDrive2',
+  aria2: 'aria2',
+  qbittorrent: 'qBittorrent',
 }
 
 function parentPath(value) {
@@ -140,6 +150,7 @@ async function copyText(value) {
 }
 
 export default function DownloadsView({ onToast }) {
+  const useHostPaths = useStore((state) => hostPathsEnabled(state.config))
   const containerMode = useStore((state) =>
     ['1', 'true', 'yes', 'on'].includes(
       String(state.config?.runtime_container || '')
@@ -333,10 +344,15 @@ export default function DownloadsView({ onToast }) {
                     : job.bytes_total > 0
                       ? Math.max(0, Math.min(100, (job.bytes_downloaded * 100) / job.bytes_total))
                       : 0
-                const showLocalProgress = ['local_downloading', 'completed'].includes(job.status)
+                const showLocalProgress =
+                  ['local_downloading', 'completed'].includes(job.status) ||
+                  (job.provider !== 'clouddrive2' &&
+                    job.status === 'offline_downloading' &&
+                    job.bytes_total > 0)
                 const busy = busyJobIds.has(job.id)
                 const terminal = ['completed', 'failed', 'canceled'].includes(job.status)
                 const localLocation = downloadLocation(job)
+                const localLocationDisplay = displayHostPath(localLocation, useHostPaths)
                 return (
                   <article
                     key={job.id}
@@ -363,7 +379,7 @@ export default function DownloadsView({ onToast }) {
                           >
                             {completedWithSkips
                               ? zh('已完成（有文件跳过）', 'Completed with skipped files')
-                              : statusLabel(job.status)}
+                              : statusLabel(job.status, job.provider)}
                             {job.error_message ? (
                               <Tooltip
                                 arrow
@@ -387,13 +403,18 @@ export default function DownloadsView({ onToast }) {
                           <span className="text-[10px] font-medium text-gray-500">
                             {formatTime(job.created_at)}
                           </span>
+                          {job.provider ? (
+                            <span className="rounded bg-slate-100 px-1 py-0.5 text-[10px] font-medium text-slate-500">
+                              {providerLabels[job.provider] || job.provider}
+                            </span>
+                          ) : null}
                         </div>
                         <div
                           className="mt-0.5 truncate text-[11px] text-gray-400"
-                          title={localLocation}
+                          title={localLocationDisplay}
                         >
                           {zh('下载位置：', 'Download location: ')}
-                          {localLocation}
+                          {localLocationDisplay}
                         </div>
                       </div>
                       <div className="flex shrink-0 flex-wrap justify-end gap-1.5">

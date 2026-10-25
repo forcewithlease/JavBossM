@@ -447,7 +447,7 @@ func processLocalDownloadJob(ctx context.Context, job *models.DownloadJob) error
 		}
 	}
 	if !finished {
-		if err := waitForLocalDownload(ctx, client, job.ID, remoteTaskID); err != nil {
+		if err := waitForLocalDownload(ctx, client, job.ID, remoteTaskID, providerFolder, job.InfoHash); err != nil {
 			return err
 		}
 	}
@@ -487,10 +487,24 @@ func updateLocalProgress(ctx context.Context, jobID int64, status *downloader.Lo
 	})
 }
 
-func waitForLocalDownload(ctx context.Context, client downloader.LocalClient, jobID int64, taskID string) error {
+func waitForLocalDownload(
+	ctx context.Context,
+	client downloader.LocalClient,
+	jobID int64,
+	taskID string,
+	directory string,
+	infoHash string,
+) error {
 	deadline := time.Now().Add(offlineDownloadMaxWait)
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
+
+	hydrator, canHydrate := client.(interface {
+		ReplaceWithTorrent(context.Context, []byte, string, string) error
+	})
+	startedAt := time.Now()
+	hydrationAttempted := false
+
 	for {
 		if time.Now().After(deadline) {
 			return errors.New("local download timed out")
@@ -506,6 +520,26 @@ func waitForLocalDownload(ctx context.Context, client downloader.LocalClient, jo
 			if err := updateLocalProgress(ctx, jobID, status); err != nil {
 				return err
 			}
+			if status.TotalBytes > 0 {
+				hydrationAttempted = true
+			}
+			// Some magnets never receive metadata from peers. Fetch the cached
+			// .torrent once and replace the task while keeping the same GID.
+			if canHydrate && !hydrationAttempted &&
+				status.State == downloader.OfflineRunning && status.TotalBytes == 0 &&
+				time.Since(startedAt) > 30*time.Second {
+				hydrationAttempted = true
+				hydrateCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+				torrent, fetchErr := fetchCachedTorrent(hydrateCtx, infoHash)
+				if fetchErr != nil {
+					logging.Info("torrent metadata cache unavailable job=%d hash=%s: %v", jobID, infoHash, fetchErr)
+				} else if replaceErr := hydrator.ReplaceWithTorrent(hydrateCtx, torrent, directory, taskID); replaceErr != nil {
+					logging.Error("hydrate magnet metadata failed job=%d: %v", jobID, replaceErr)
+				} else {
+					logging.Info("hydrated magnet metadata job=%d hash=%s", jobID, infoHash)
+				}
+				cancel()
+			}
 			switch status.State {
 			case downloader.OfflineComplete:
 				return nil
@@ -518,6 +552,41 @@ func waitForLocalDownload(ctx context.Context, client downloader.LocalClient, jo
 			}
 		}
 	}
+}
+
+// fetchCachedTorrent asks a public metadata cache for the .torrent file of a
+// magnet. It is best-effort: failures fall back to waiting for peers.
+func fetchCachedTorrent(ctx context.Context, infoHash string) ([]byte, error) {
+	infoHash = strings.ToUpper(strings.TrimSpace(infoHash))
+	if len(infoHash) != 40 {
+		return nil, errors.New("invalid info hash")
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		"https://itorrents.org/torrent/"+infoHash+".torrent", nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("User-Agent", "Mozilla/5.0 (compatible; JavBoss)")
+	client := &http.Client{
+		Timeout:   20 * time.Second,
+		Transport: &http.Transport{Proxy: util.DetectProxyFunc()},
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("torrent cache returned HTTP %d", response.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, 8<<20))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) < 100 || data[0] != 'd' {
+		return nil, errors.New("torrent cache returned invalid data")
+	}
+	return data, nil
 }
 
 // scanLocalDownloadFiles returns files that are large enough to be videos.
