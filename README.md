@@ -1,4 +1,4 @@
-<h1 align="center">LocalJav</h1>
+<h1 align="center">JavBossM</h1>
 
 <p align="center"><strong>自建 JAV 媒体库 · 自动刮削 · 移动端播放 · Docker / NAS 部署</strong></p>
 
@@ -11,7 +11,7 @@
   <img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg">
 </p>
 
-LocalJav 是一个**可自托管的 JAV / 视频媒体库**：自动扫描本地目录、识别番号、抓取 JAV 元数据、生成封面与截图，提供标签、收藏、筛选、瀑布流浏览，以及桌面和移动端浏览器播放。适合在 NAS、家庭服务器或本机上长期运行。
+JavBossM 是一个**可自托管的 JAV / 视频媒体库**：自动扫描本地目录、识别番号、抓取 JAV 元数据、生成封面与截图，提供标签、收藏、筛选、瀑布流浏览，以及桌面和移动端浏览器播放。适合在 NAS、家庭服务器或本机上长期运行。
 
 本项目基于开源项目 [JavBoss](https://github.com/Solr159/JavBoss) 二次开发，遵循 **GPL-3.0** 协议。相较于上游，本仓库重点增强了**移动端体验**与**本地下载器接入**。
 
@@ -80,7 +80,7 @@ LocalJav 是一个**可自托管的 JAV / 视频媒体库**：自动扫描本地
 1. 打开下载设置，程序会自动探测本机正在运行的下载器。
 2. 选择要使用的下载器；未选择时使用默认下载器（CloudDrive2）。
 3. 本地下载器需要能写入「本地下载目录」。如果下载器运行在容器或另一台机器上，请在「下载器写入目录」中填写它对同一块磁盘的挂载路径。
-4. 下载完成后，LocalJav 会扫描任务目录并记录文件，无需再次搬运。
+4. 下载完成后，JavBossM 会扫描任务目录并记录文件，无需再次搬运。
 5. 磁力链接长时间拿不到元数据时，会自动尝试公共 `.torrent` 缓存并继续任务。
 6. 下载页会显示进度、实时速度和下载器；任务完成后可一键把最大的视频文件移入媒体目录。
 
@@ -133,9 +133,9 @@ LocalJav 是一个**可自托管的 JAV / 视频媒体库**：自动扫描本地
 
 ```yaml
 services:
-  localjav:
-    image: localjav:latest
-    container_name: localjav
+  javbossm:
+    image: javbossm:latest
+    container_name: javbossm
     user: "1000:1000"
     network_mode: host
     command: ["./javboss", "-port", "8655"]
@@ -154,10 +154,10 @@ services:
 
 ```bash
 # 1. 构建镜像（在仓库根目录）
-docker build -t localjav:latest .
+docker build -t javbossm:latest .
 
 # 如果所在网络访问不了 gcr.io（distroless 基础镜像），改用：
-docker build -f Dockerfile.local -t localjav:latest .
+docker build -f Dockerfile.local -t javbossm:latest .
 
 # 2. 启动
 docker compose up -d

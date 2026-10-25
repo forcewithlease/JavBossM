@@ -1,9 +1,9 @@
 services:
   javboss:
-    # 由本仓库构建的镜像：docker build -t localjav:latest .
+    # 由本仓库构建的镜像：docker build -t javbossm:latest .
     # 也可用官方镜像：JAVBOSS_DOCKER_IMAGE=ghcr.io/solr159/javboss:latest docker compose up -d
-    image: ${JAVBOSS_DOCKER_IMAGE:-localjav:latest}
-    container_name: javboss
+    image: ${JAVBOSS_DOCKER_IMAGE:-javbossm:latest}
+    container_name: javbossm
     user: "1000:1000"
     network_mode: host
     command: ["./javboss", "-port", "8655"]
