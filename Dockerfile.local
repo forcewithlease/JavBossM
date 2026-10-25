@@ -1,0 +1,40 @@
+# syntax=docker/dockerfile:1.7
+
+# Local-friendly image build: avoids the gcr.io distroless base image, which is
+# not reachable from some networks. The compiled binary and frontend are layered
+# on top of the official JavBoss runtime (ffmpeg included).
+#
+#   docker build -f Dockerfile.local -t localjav:latest .
+
+FROM --platform=$BUILDPLATFORM node:24-bookworm-slim AS web-build
+
+ARG NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+ENV NPM_CONFIG_REGISTRY=${NPM_CONFIG_REGISTRY}
+
+WORKDIR /src/web
+COPY web/package*.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --prefer-offline
+COPY web/ ./
+RUN npm run build
+
+FROM golang:1.25-bookworm AS go-build
+
+ARG GOPROXY=https://goproxy.cn,direct
+ARG GOSUMDB=sum.golang.org
+ARG APP_VERSION=dev
+ENV GOPROXY=${GOPROXY} \
+  GOSUMDB=${GOSUMDB}
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod \
+  --mount=type=cache,target=/root/.cache/go-build \
+  go build -trimpath -ldflags="-s -w -X main.buildMode=release -X javboss/internal/common.Version=${APP_VERSION}" -o /out/javboss ./cmd/server
+
+FROM ghcr.io/solr159/javboss:latest
+
+WORKDIR /app
+COPY --from=go-build /out/javboss ./javboss
+COPY --from=web-build /src/web/dist ./web/dist

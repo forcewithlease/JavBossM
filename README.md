@@ -120,6 +120,7 @@ services:
       - ./data:/app/data
       # 宿主机路径 -> 容器内 /host 下的同路径
       - /path/to/media:/host/path/to/media
+      # 开发时可挂载本地前端构建产物；使用镜像内置前端时删除这一行
       - ./web/dist:/app/web/dist:ro
     restart: unless-stopped
 ```
@@ -128,11 +129,17 @@ services:
 # 1. 构建镜像（在仓库根目录）
 docker build -t localjav:latest .
 
-# 2. 构建前端（如不使用镜像内置前端）
-cd web && npm ci && npm run build && cd ..
+# 如果所在网络访问不了 gcr.io（distroless 基础镜像），改用：
+docker build -f Dockerfile.local -t localjav:latest .
 
-# 3. 启动
+# 2. 启动
 docker compose up -d
+```
+
+镜像已内置前端。只有在开发前端并希望热更新时才需要额外挂载 `./web/dist`：
+
+```bash
+cd web && npm ci && npm run build
 ```
 
 打开 `http://<服务器 IP>:8655`，使用 `admin / admin` 登录。
