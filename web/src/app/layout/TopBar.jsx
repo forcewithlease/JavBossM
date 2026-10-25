@@ -11,6 +11,9 @@ import FolderRoundedIcon from '@mui/icons-material/FolderRounded'
 import SearchIcon from '@mui/icons-material/Search'
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
 import ShuffleOutlinedIcon from '@mui/icons-material/ShuffleOutlined'
+import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded'
+import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded'
+import TuneRoundedIcon from '@mui/icons-material/TuneRounded'
 import { Button, IconButton, Menu, MenuItem, Popper, Slider } from '@mui/material'
 import {
   formatIdolProfileFilterRange,
@@ -44,7 +47,14 @@ function FilterChip({ label, onRemove }) {
   )
 }
 
-function FavoriteRatingFilter({ enabled, min, max, onEnabledChange, onRangeChange }) {
+function FavoriteRatingFilter({
+  enabled,
+  min,
+  max,
+  onEnabledChange,
+  onRangeChange,
+  className = '',
+}) {
   const normalizedMin = Number.isFinite(Number(min)) ? Number(min) : 0.5
   const normalizedMax = Number.isFinite(Number(max)) ? Number(max) : 5
   const range = normalizedMin <= normalizedMax ? [normalizedMin, normalizedMax] : [0.5, 5]
@@ -54,7 +64,9 @@ function FavoriteRatingFilter({ enabled, min, max, onEnabledChange, onRangeChang
     : zh('启用喜爱度筛选', 'Enable favorite rating filter')
 
   return (
-    <div className={`favorite-rating-filter ${enabled ? 'favorite-rating-filter--active' : ''}`}>
+    <div
+      className={`favorite-rating-filter ${enabled ? 'favorite-rating-filter--active' : ''} ${className}`}
+    >
       <button
         type="button"
         className="favorite-rating-filter__toggle"
@@ -275,11 +287,14 @@ function IdolProfileFilter({ definition, value, onChange }) {
   )
 }
 
-function IdolProfileFilters({ filters, onChange, showClear, onClear }) {
+function IdolProfileFilters({ filters, onChange, showClear, onClear, className = '' }) {
   const normalized = useMemo(() => normalizeIdolProfileFilters(filters), [filters])
 
   return (
-    <div className="idol-profile-filters" aria-label={zh('女优资料筛选', 'Idol profile filters')}>
+    <div
+      className={`idol-profile-filters ${className}`}
+      aria-label={zh('女优资料筛选', 'Idol profile filters')}
+    >
       {IDOL_PROFILE_FILTER_DEFINITIONS.map((definition) => (
         <IdolProfileFilter
           key={definition.key}
@@ -386,6 +401,10 @@ export default function TopBar({
   onIdolProfileFilterChange,
   onHome,
   onRandomClick,
+  canGoBack = false,
+  canGoForward = false,
+  onBrowserBack,
+  onBrowserForward,
   onOpenFavoriteGroups,
   onOpenFilterEditor,
   onOpenFavoriteManager,
@@ -408,6 +427,7 @@ export default function TopBar({
   const headerRef = useRef(null)
   const favoriteMenuRef = useRef(null)
   const [favoriteMenuOpen, setFavoriteMenuOpen] = useState(false)
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
 
   const selectedFavoriteGroup = useMemo(() => {
     const selectedId = Number(selectedFavoriteGroupId)
@@ -496,11 +516,15 @@ export default function TopBar({
     (filterItems.length > 0 ||
       Boolean(onOpenFilterEditor) ||
       ((!isJavMode || javTab !== 'idol') && hasActiveControlFilter))
+  const showMobileFilterToggle =
+    showFilterCluster || Boolean(onRandomClick) || Boolean(isJavMode && !isJavDownload)
 
   return (
     <header
       ref={headerRef}
-      className={`filter-topbar ${favoriteMenuOpen ? 'filter-topbar--menu-open' : ''}`}
+      className={`filter-topbar ${favoriteMenuOpen ? 'filter-topbar--menu-open' : ''} ${
+        mobileFiltersOpen ? 'filter-topbar--mobile-expanded' : ''
+      }`}
     >
       <div className="filter-topbar__body">
         <button
@@ -512,135 +536,174 @@ export default function TopBar({
           JavBoss
         </button>
         <div className="filter-topbar__controls">
-          {isJavMode && !isJavDownload ? (
-            <div
-              ref={favoriteMenuRef}
-              className="relative -ml-1 mr-4 shrink-0 border-r border-slate-200 pr-4"
-            >
-              <button
-                type="button"
-                className={`filter-action-button favorite-menu-trigger ${selectedFavoriteGroup ? 'favorite-menu-trigger--selected' : ''}`}
-                onClick={() => {
-                  setFavoriteMenuOpen((open) => !open)
-                  if (!favoriteMenuOpen) onOpenFavoriteGroups?.()
-                }}
-                aria-label={favoriteLabel}
-                aria-haspopup="dialog"
-                aria-expanded={favoriteMenuOpen}
-                title={selectedFavoriteGroup?.name || favoriteLabel}
+          <div className="filter-topbar__extras">
+            {isJavMode && !isJavDownload ? (
+              <div
+                ref={favoriteMenuRef}
+                className="filter-topbar__favorite relative -ml-1 mr-4 shrink-0 border-r border-slate-200 pr-4"
               >
-                <FolderOutlinedIcon fontSize="small" />
-                {selectedFavoriteGroup ? (
-                  <span className="max-w-28 truncate">{selectedFavoriteGroup.name}</span>
-                ) : null}
-                <ExpandMoreRoundedIcon
-                  fontSize="small"
-                  className="favorite-menu-trigger__chevron"
-                />
-              </button>
-              {favoriteMenuOpen ? (
-                <FavoriteGroupMenu
-                  title={favoriteLabel}
-                  allLabel={favoriteAllLabel}
-                  groups={favoriteGroups}
-                  selectedGroupId={selectedFavoriteGroupId}
-                  loading={favoriteGroupsLoading}
-                  error={favoriteGroupsError}
-                  buildGroupUrl={buildFavoriteGroupUrl}
-                  onSelect={(groupId) => {
-                    onFavoriteGroupSelect?.(groupId)
-                    setFavoriteMenuOpen(false)
-                  }}
-                  onOpenManager={(group) => onOpenFavoriteManager?.(group)}
-                />
-              ) : null}
-            </div>
-          ) : null}
-          {!isJavDownload ? (
-            <form onSubmit={onSubmitSearch} className="filter-search">
-              <input
-                value={activeSearchInput}
-                onChange={(event) => onSearchInputChange?.(event.target.value)}
-                placeholder={placeholder}
-                aria-label={placeholder}
-              />
-              <Button
-                component="a"
-                href={activeSearchHref}
-                type="submit"
-                variant="contained"
-                size="small"
-                onClick={(event) => {
-                  if (isModifiedClick(event)) return
-                  event.preventDefault()
-                  onSubmitSearch?.(event)
-                }}
-                sx={{ minWidth: 34, width: 34, height: 30, p: 0, borderRadius: '8px' }}
-                aria-label={zh('应用搜索', 'Apply search')}
-              >
-                <SearchIcon sx={{ fontSize: 17 }} />
-              </Button>
-            </form>
-          ) : null}
-
-          {isJavMode && javTab === 'list' ? (
-            <FavoriteRatingFilter
-              enabled={favoriteRatingEnabled}
-              min={favoriteRatingMin}
-              max={favoriteRatingMax}
-              onEnabledChange={onFavoriteRatingEnabledChange}
-              onRangeChange={onFavoriteRatingRangeChange}
-            />
-          ) : null}
-
-          {isJavMode && javTab === 'idol' ? (
-            <IdolProfileFilters
-              filters={idolProfileFilters}
-              onChange={onIdolProfileFilterChange}
-              showClear={hasActiveControlFilter}
-              onClear={onClearFilters}
-            />
-          ) : null}
-
-          {onRandomClick ? (
-            <button type="button" className="filter-action-button" onClick={onRandomClick}>
-              <ShuffleOutlinedIcon fontSize="small" />
-              <span>{zh('随机', 'Random')}</span>
-            </button>
-          ) : null}
-
-          {showFilterCluster ? (
-            <div className="filter-topbar__filter-cluster">
-              {filterItems.length > 0 ? (
-                <div
-                  className="filter-topbar__conditions"
-                  aria-label={zh('当前筛选条件', 'Active filters')}
-                >
-                  {filterItems.map((item) => (
-                    <FilterChip key={item.key} label={item.label} onRemove={item.onRemove} />
-                  ))}
-                </div>
-              ) : null}
-
-              {onOpenFilterEditor ? (
                 <button
                   type="button"
-                  className="filter-clear-button"
-                  onClick={onOpenFilterEditor}
-                  title={zh('编辑筛选条件', 'Edit filters')}
-                  aria-label={zh('编辑筛选条件', 'Edit filters')}
+                  className={`filter-action-button favorite-menu-trigger ${selectedFavoriteGroup ? 'favorite-menu-trigger--selected' : ''}`}
+                  onClick={() => {
+                    setFavoriteMenuOpen((open) => !open)
+                    if (!favoriteMenuOpen) onOpenFavoriteGroups?.()
+                  }}
+                  aria-label={favoriteLabel}
+                  aria-haspopup="dialog"
+                  aria-expanded={favoriteMenuOpen}
+                  title={selectedFavoriteGroup?.name || favoriteLabel}
                 >
-                  {zh('编辑', 'Edit')}
+                  <FolderOutlinedIcon fontSize="small" />
+                  {selectedFavoriteGroup ? (
+                    <span className="max-w-28 truncate">{selectedFavoriteGroup.name}</span>
+                  ) : null}
+                  <ExpandMoreRoundedIcon
+                    fontSize="small"
+                    className="favorite-menu-trigger__chevron"
+                  />
                 </button>
-              ) : null}
+                {favoriteMenuOpen ? (
+                  <FavoriteGroupMenu
+                    title={favoriteLabel}
+                    allLabel={favoriteAllLabel}
+                    groups={favoriteGroups}
+                    selectedGroupId={selectedFavoriteGroupId}
+                    loading={favoriteGroupsLoading}
+                    error={favoriteGroupsError}
+                    buildGroupUrl={buildFavoriteGroupUrl}
+                    onSelect={(groupId) => {
+                      onFavoriteGroupSelect?.(groupId)
+                      setFavoriteMenuOpen(false)
+                    }}
+                    onOpenManager={(group) => onOpenFavoriteManager?.(group)}
+                  />
+                ) : null}
+              </div>
+            ) : null}
 
-              {hasActiveControlFilter || filterItems.length > 0 ? (
-                <button type="button" className="filter-clear-button" onClick={onClearFilters}>
-                  {zh('清空', 'Clear')}
-                </button>
-              ) : null}
-            </div>
-          ) : null}
+            {isJavMode && javTab === 'list' ? (
+              <FavoriteRatingFilter
+                enabled={favoriteRatingEnabled}
+                min={favoriteRatingMin}
+                max={favoriteRatingMax}
+                onEnabledChange={onFavoriteRatingEnabledChange}
+                onRangeChange={onFavoriteRatingRangeChange}
+              />
+            ) : null}
+
+            {isJavMode && javTab === 'idol' ? (
+              <IdolProfileFilters
+                filters={idolProfileFilters}
+                onChange={onIdolProfileFilterChange}
+                showClear={hasActiveControlFilter}
+                onClear={onClearFilters}
+              />
+            ) : null}
+
+            {onRandomClick ? (
+              <button type="button" className="filter-action-button" onClick={onRandomClick}>
+                <ShuffleOutlinedIcon fontSize="small" />
+                <span>{zh('随机', 'Random')}</span>
+              </button>
+            ) : null}
+
+            {showFilterCluster ? (
+              <div className="filter-topbar__filter-cluster">
+                {filterItems.length > 0 ? (
+                  <div
+                    className="filter-topbar__conditions"
+                    aria-label={zh('当前筛选条件', 'Active filters')}
+                  >
+                    {filterItems.map((item) => (
+                      <FilterChip key={item.key} label={item.label} onRemove={item.onRemove} />
+                    ))}
+                  </div>
+                ) : null}
+
+                {onOpenFilterEditor ? (
+                  <button
+                    type="button"
+                    className="filter-clear-button"
+                    onClick={onOpenFilterEditor}
+                    title={zh('编辑筛选条件', 'Edit filters')}
+                    aria-label={zh('编辑筛选条件', 'Edit filters')}
+                  >
+                    {zh('编辑', 'Edit')}
+                  </button>
+                ) : null}
+
+                {hasActiveControlFilter || filterItems.length > 0 ? (
+                  <button type="button" className="filter-clear-button" onClick={onClearFilters}>
+                    {zh('清空', 'Clear')}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <div className="filter-topbar__history" aria-label={zh('浏览历史', 'Navigation history')}>
+            <button
+              type="button"
+              onClick={onBrowserBack}
+              disabled={!canGoBack}
+              aria-label={zh('后退', 'Back')}
+            >
+              <ArrowBackRoundedIcon fontSize="small" />
+            </button>
+            <button
+              type="button"
+              onClick={onBrowserForward}
+              disabled={!canGoForward}
+              aria-label={zh('前进', 'Forward')}
+            >
+              <ArrowForwardRoundedIcon fontSize="small" />
+            </button>
+          </div>
+          <div className="filter-topbar__search-group">
+            {!isJavDownload ? (
+              <form onSubmit={onSubmitSearch} className="filter-search">
+                <input
+                  value={activeSearchInput}
+                  onChange={(event) => onSearchInputChange?.(event.target.value)}
+                  placeholder={placeholder}
+                  aria-label={placeholder}
+                />
+                <Button
+                  component="a"
+                  href={activeSearchHref}
+                  type="submit"
+                  variant="contained"
+                  size="small"
+                  onClick={(event) => {
+                    if (isModifiedClick(event)) return
+                    event.preventDefault()
+                    onSubmitSearch?.(event)
+                  }}
+                  sx={{ minWidth: 34, width: 34, height: 30, p: 0, borderRadius: '8px' }}
+                  aria-label={zh('应用搜索', 'Apply search')}
+                >
+                  <SearchIcon sx={{ fontSize: 17 }} />
+                </Button>
+              </form>
+            ) : null}
+            {showMobileFilterToggle ? (
+              <button
+                type="button"
+                className={`filter-topbar__mobile-toggle ${
+                  mobileFiltersOpen ? 'filter-topbar__mobile-toggle--open' : ''
+                } ${hasActiveControlFilter || filterItems.length > 0 ? 'filter-topbar__mobile-toggle--active' : ''}`}
+                onClick={() => setMobileFiltersOpen((open) => !open)}
+                aria-expanded={mobileFiltersOpen}
+                aria-label={
+                  mobileFiltersOpen
+                    ? zh('收起筛选条件', 'Collapse filters')
+                    : zh('展开筛选条件', 'Expand filters')
+                }
+              >
+                <TuneRoundedIcon fontSize="small" />
+              </button>
+            ) : null}
+          </div>
 
           <div className="filter-topbar__actions">
             {hasSelection ? (

@@ -86,10 +86,14 @@ export default function JavGrid({
   const hasItems = Array.isArray(displayItems) && displayItems.length > 0
   const columnCount = Number.isFinite(Number(columns)) ? Math.floor(Number(columns)) : 0
   const fixedColumnCount = columnCount > 0 ? Math.min(columnCount, 12) : 0
-  const gridClassName = 'grid gap-4'
+  const gridClassName = `grid gap-2.5 sm:gap-4 ${fixedColumnCount ? 'jav-grid--fixed' : ''}`
   const gridStyle = fixedColumnCount
-    ? { gridTemplateColumns: `repeat(${fixedColumnCount}, minmax(0, 1fr))` }
-    : { gridTemplateColumns: `repeat(auto-fill, minmax(${portrait ? '11rem' : '21rem'}, 1fr))` }
+    ? { '--jav-fixed-columns': fixedColumnCount }
+    : {
+        gridTemplateColumns: `repeat(auto-fill, minmax(${
+          portrait ? 'var(--jav-card-min-portrait, 11rem)' : 'var(--jav-card-min-landscape, 21rem)'
+        }, 1fr))`,
+      }
 
   if (!hasItems) {
     return (

@@ -1,6 +1,16 @@
+import { isSmallViewport } from '@/utils/viewport'
+
 export function createNavigationSlice({ set }) {
+  // Phones start in waterfall mode: it avoids the cramped pagination row.
+  const waterfall = isSmallViewport()
   return {
-    waterfallModes: { video: false, jav: false, idol: false, studio: false, series: false },
+    waterfallModes: {
+      video: waterfall,
+      jav: waterfall,
+      idol: waterfall,
+      studio: waterfall,
+      series: waterfall,
+    },
     setWaterfallModes: (update) =>
       set((state) => ({ waterfallModes: update(state.waterfallModes) })),
     viewMode: 'video',

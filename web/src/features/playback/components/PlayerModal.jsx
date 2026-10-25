@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useMediaQuery } from '@mui/material'
+import { SMALL_VIEWPORT_QUERY } from '@/utils/viewport'
 import QueuePlayNextRoundedIcon from '@mui/icons-material/QueuePlayNextRounded'
 import SkipPreviousRoundedIcon from '@mui/icons-material/SkipPreviousRounded'
 import SkipNextRoundedIcon from '@mui/icons-material/SkipNextRounded'
 import PlaybackPlaylist from '@/features/playback/components/PlaybackPlaylist'
+import MobilePlayerControls from '@/features/playback/components/MobilePlayerControls'
 import usePlayerWindow from '@/features/playback/hooks/usePlayerWindow'
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
 import videojs from 'video.js'
@@ -44,13 +47,17 @@ export default function PlayerModal({
   showHotkeyHint = true,
 }) {
   const isOpen = Boolean(video)
+  const isMobilePlayer = useMediaQuery(SMALL_VIEWPORT_QUERY)
   const playerWindow = usePlayerWindow(isOpen)
   const [player, setPlayer] = useState(null)
   const activePlaybackRef = useRef(null)
   const stopSourceRef = useRef(null)
   const [videoContainer, setVideoContainer] = useState(null)
   const onEndedRef = useRef(null)
-  const [playlistVisible, setPlaylistVisible] = useState(true)
+  const [playlistVisible, setPlaylistVisible] = useState(
+    () =>
+      typeof window.matchMedia !== 'function' || !window.matchMedia('(max-width: 767px)').matches
+  )
   const onCloseRef = useRef(onClose)
   const hotkeyMapRef = useRef(new Map())
   const screenshotInFlightRef = useRef(false)
@@ -326,7 +333,7 @@ export default function PlayerModal({
 
     const playback = { video, locationId: playbackInfo.location_id || video.location_id }
     activePlaybackRef.current = playback
-    player.controls(true)
+    player.controls(!isMobilePlayer)
     player.autoplay(true)
     const stopWatchTracking = startWatchTracking(player, {
       create: () => createPlaybackSession(video.id, playback.locationId),
@@ -393,11 +400,55 @@ export default function PlayerModal({
     }
     stopSourceRef.current = stop
     return stop
-  }, [player, video, startTime, resumePlayback, selectedSource, playbackInfo, loadingPlayback])
+  }, [
+    player,
+    video,
+    startTime,
+    resumePlayback,
+    selectedSource,
+    playbackInfo,
+    loadingPlayback,
+    isMobilePlayer,
+  ])
 
   if (!video) return null
 
   const displayName = getVideoDisplayName(video)
+  const playbackLoading = loadingPlayback || playbackInfo?.video !== video
+
+  if (isMobilePlayer) {
+    return (
+      <AppModal
+        ariaLabel={displayName || zh('视频播放', 'Video playback')}
+        backdropColor="rgba(0, 0, 0, 0.95)"
+        contentClassName="player-window player-window--mobile"
+        onClose={onClose}
+        zIndex={1700}
+      >
+        <div className="mobile-player">
+          <div ref={setVideoContainer} data-vjs-player className="mobile-player__video" />
+          <MobilePlayerControls
+            player={player}
+            title={displayName}
+            playlist={playlist}
+            currentIndex={currentIndex}
+            onSelectVideo={onSelectVideo}
+            onClose={onClose}
+          />
+          {playbackLoading ? (
+            <div className="mobile-player__loading" aria-live="polite">
+              {zh('加载播放信息中…', 'Loading playback info...')}
+            </div>
+          ) : null}
+          {playbackError ? (
+            <div className="mobile-player__error" role="alert">
+              {playbackError}
+            </div>
+          ) : null}
+        </div>
+      </AppModal>
+    )
+  }
 
   return (
     <AppModal
@@ -487,7 +538,7 @@ export default function PlayerModal({
               </div>
             ) : null}
             <div ref={setVideoContainer} data-vjs-player className="h-full w-full" />
-            {loadingPlayback || playbackInfo?.video !== video ? (
+            {playbackLoading ? (
               <div
                 data-player-loading
                 className="absolute inset-0 z-20 flex items-center justify-center bg-black text-sm text-white"

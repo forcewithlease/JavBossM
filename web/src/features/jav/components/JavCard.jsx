@@ -186,7 +186,7 @@ export default function JavCard(props) {
             onClick={handleOpenDetail}
             aria-label={zh(`查看 ${code || 'JAV'} 详情`, `View ${code || 'JAV'} details`)}
           />
-          <div className="card-hover-focus-visible pointer-events-none absolute inset-0 z-[2] flex items-center justify-center bg-black/0 text-white opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="jav-card__play card-hover-focus-visible pointer-events-none absolute inset-0 z-[2] flex items-center justify-center bg-black/0 text-white opacity-0 transition-opacity group-hover:opacity-100">
             <button
               onClick={handlePlay}
               disabled={!canPlay}

@@ -1465,11 +1465,11 @@ export default function GlobalSettingsModal({
   return (
     <AppModal
       ariaLabelledby="global-settings-title"
-      className="px-4"
-      contentClassName="flex h-[min(86vh,820px)] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-zinc-200 bg-[#f5f5f7] shadow-2xl"
+      className="settings-modal-root px-4"
+      contentClassName="settings-modal flex h-[min(86vh,820px)] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-zinc-200 bg-[#f5f5f7] shadow-2xl"
       onClose={onClose}
     >
-      <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 bg-white/70 px-6 py-4 backdrop-blur">
+      <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 bg-white/70 px-4 py-3 backdrop-blur md:px-6 md:py-4">
         <div>
           <h2 id="global-settings-title" className="text-lg font-semibold text-zinc-900">
             {zh('全局设置', 'Global Settings')}
@@ -1488,7 +1488,7 @@ export default function GlobalSettingsModal({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <aside className="flex min-h-0 shrink-0 flex-col border-b border-zinc-200 bg-white/60 p-3 backdrop-blur md:w-[280px] md:border-b-0 md:border-r">
+        <aside className="flex min-h-0 shrink-0 flex-col border-b border-zinc-200 bg-white/60 p-2 backdrop-blur md:w-[280px] md:border-b-0 md:border-r md:p-3">
           <div className="flex min-h-0 gap-2 overflow-x-auto md:flex-1 md:flex-col md:overflow-y-auto">
             {visibleSections.map((section) => {
               const selected = currentSection === section.id
@@ -1499,7 +1499,7 @@ export default function GlobalSettingsModal({
                   key={section.id}
                   type="button"
                   onClick={() => setActiveSection(section.id)}
-                  className={`min-w-[220px] shrink-0 rounded-2xl border px-4 py-3 text-left transition md:min-w-0 ${
+                  className={`min-w-[8.5rem] shrink-0 rounded-2xl border px-3 py-2 text-left transition md:min-w-0 md:px-4 md:py-3 ${
                     selected
                       ? 'border-zinc-200 bg-white shadow-sm'
                       : 'border-transparent bg-transparent hover:border-zinc-200 hover:bg-white/80'

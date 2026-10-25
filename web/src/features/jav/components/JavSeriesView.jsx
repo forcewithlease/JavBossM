@@ -104,8 +104,10 @@ function JavSeriesGrid({ items, onSelectSeries, onSelectStudio, onOpenFavorites,
         </div>
       )}
       <div
-        className="grid gap-4 bg-white"
-        style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(16rem, 1fr))' }}
+        className="grid gap-2.5 bg-white sm:gap-4"
+        style={{
+          gridTemplateColumns: 'repeat(auto-fill, minmax(var(--jav-card-min-card, 16rem), 1fr))',
+        }}
       >
         {items.map((item) => (
           <SeriesCard

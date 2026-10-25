@@ -1,28 +1,12 @@
-import { useEffect, useState } from 'react'
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded'
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded'
-import CollectionsBookmarkOutlinedIcon from '@mui/icons-material/CollectionsBookmarkOutlined'
 import DisplaySettingsOutlinedIcon from '@mui/icons-material/DisplaySettingsOutlined'
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined'
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined'
-import MovieCreationOutlinedIcon from '@mui/icons-material/MovieCreationOutlined'
 import NumbersRoundedIcon from '@mui/icons-material/NumbersRounded'
-import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined'
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
-import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined'
-import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined'
-import { fetchJavPrefixes } from '@/features/jav/api'
-import JavPrefixModal from '@/features/jav/components/JavPrefixModal'
-import { getErrorMessage } from '@/utils/errors'
+import { PRIMARY_TABS } from '@/app/layout/navigationTabs'
 import { zh } from '@/utils/i18n'
-
-const tabs = [
-  { id: 'video', label: zh('视频', 'Video'), icon: VideoLibraryOutlinedIcon },
-  { id: 'list', label: 'JAV', icon: MovieCreationOutlinedIcon },
-  { id: 'idol', label: zh('女优', 'Idols'), icon: PeopleAltOutlinedIcon },
-  { id: 'studio', label: zh('片商', 'Studios'), icon: VideocamOutlinedIcon },
-  { id: 'series', label: zh('系列', 'Series'), icon: CollectionsBookmarkOutlinedIcon },
-]
 
 function RailButton({
   active = false,
@@ -57,44 +41,17 @@ export default function SideTabs({
   canGoBack,
   canGoForward,
   isJavMode,
-  javPrefix = '',
-  buildJavPrefixUrl,
   onBrowserBack,
   onBrowserForward,
   onOpenDownload,
   onOpenGlobalSettings,
   onOpenDisplaySettings,
+  onOpenJavPrefix,
   onOpenJavTagModal,
-  onJavPrefixClick,
   onOpenTagModal,
   onSelectTab,
   showDirectorySetupHint = false,
 }) {
-  const [prefixModalOpen, setPrefixModalOpen] = useState(false)
-  const [prefixItems, setPrefixItems] = useState([])
-  const [prefixLoading, setPrefixLoading] = useState(false)
-  const [prefixError, setPrefixError] = useState('')
-
-  useEffect(() => {
-    if (!prefixModalOpen) return undefined
-    let cancelled = false
-    setPrefixLoading(true)
-    setPrefixError('')
-    fetchJavPrefixes()
-      .then((items) => {
-        if (!cancelled) setPrefixItems(Array.isArray(items) ? items : [])
-      })
-      .catch((error) => {
-        if (!cancelled) setPrefixError(getErrorMessage(error))
-      })
-      .finally(() => {
-        if (!cancelled) setPrefixLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [prefixModalOpen])
-
   return (
     <aside className="side-tabs" aria-label={zh('主导航', 'Primary navigation')}>
       <div className="side-tabs__history" aria-label={zh('浏览历史', 'Navigation history')}>
@@ -117,7 +74,7 @@ export default function SideTabs({
       </div>
 
       <nav className="side-tabs__nav">
-        {tabs.map((tab) => (
+        {PRIMARY_TABS.map((tab) => (
           <RailButton
             key={tab.id}
             active={activeTab === tab.id}
@@ -137,7 +94,7 @@ export default function SideTabs({
           <RailButton
             icon={NumbersRoundedIcon}
             label={zh('番号', 'JAV codes')}
-            onClick={() => setPrefixModalOpen(true)}
+            onClick={onOpenJavPrefix}
           />
           <RailButton
             icon={DisplaySettingsOutlinedIcon}
@@ -178,19 +135,6 @@ export default function SideTabs({
           />
         </div>
       </div>
-      <JavPrefixModal
-        open={prefixModalOpen}
-        items={prefixItems}
-        loading={prefixLoading}
-        error={prefixError}
-        activePrefix={javPrefix}
-        buildPrefixUrl={buildJavPrefixUrl}
-        onSelectPrefix={(item) => {
-          setPrefixModalOpen(false)
-          onJavPrefixClick?.(item)
-        }}
-        onClose={() => setPrefixModalOpen(false)}
-      />
     </aside>
   )
 }

@@ -20,8 +20,10 @@ export default function VideoGrid({
 }) {
   return (
     <div
-      className="grid gap-8"
-      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(15rem, 1fr))' }}
+      className="grid gap-3 sm:gap-8"
+      style={{
+        gridTemplateColumns: 'repeat(auto-fill, minmax(var(--video-card-min, 15rem), 1fr))',
+      }}
     >
       {videos.map((v) => (
         <VideoCard

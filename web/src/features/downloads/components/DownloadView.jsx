@@ -23,8 +23,8 @@ export default function DownloadView({ open, onClose, onToast }) {
       open={open}
       onClose={onClose}
       ariaLabel={zh('下载', 'Downloads')}
-      className="p-3 sm:p-6"
-      contentClassName="flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-slate-50 shadow-2xl"
+      className="downloads-modal-root p-3 sm:p-6"
+      contentClassName="downloads-modal flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-slate-50 shadow-2xl"
     >
       <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
         <div

@@ -2,7 +2,8 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const backendProxy = () => ({ target: 'http://localhost:17654', changeOrigin: false })
+const backendTarget = process.env.JAVBOSS_API_TARGET || 'http://localhost:17654'
+const backendProxy = () => ({ target: backendTarget, changeOrigin: false })
 
 // https://vitejs.dev/config/
 export default defineConfig({

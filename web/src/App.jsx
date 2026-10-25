@@ -18,6 +18,7 @@ import useDocumentTitle from '@/shared/hooks/useDocumentTitle'
 import { buildLibraryPageTitle, formatPageTitle } from '@/navigation/pageTitle'
 import useJavSelection from '@/features/jav/hooks/useJavSelection'
 import SideTabs from '@/app/layout/SideTabs'
+import MobileTabBar from '@/app/layout/MobileTabBar'
 import TopBar from '@/app/layout/TopBar'
 import {
   createDefaultIdolProfileFilters,
@@ -32,6 +33,7 @@ import JavDetailRoute from '@/features/jav/components/JavDetailRoute'
 import JavStudioDetailModal from '@/features/jav/components/JavStudioDetailModal'
 import DownloadView from '@/features/downloads/components/DownloadView'
 import JavQueryEditorModal from '@/features/jav/components/JavQueryEditorModal'
+import JavPrefixModalLauncher from '@/features/jav/components/JavPrefixModalLauncher'
 import { configFlag } from '@/utils/config'
 import VideoScreenshotsModal from '@/features/video/components/VideoScreenshotsModal'
 import PlayerModal from '@/features/playback/components/PlayerModal'
@@ -143,6 +145,7 @@ export default function App() {
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false)
   const [downloadOpen, setDownloadOpen] = useState(false)
   const [javTagModalOpen, setJavTagModalOpen] = useState(false)
+  const [javPrefixModalOpen, setJavPrefixModalOpen] = useState(false)
 
   const [javQueryEditorOpen, setJavQueryEditorOpen] = useState(false)
 
@@ -494,44 +497,66 @@ export default function App() {
     onTagClick: handleJavTagClick,
   }
 
+  const buildJavPrefixUrl = (item) =>
+    buildJavUrl({
+      page: 1,
+      tab: 'list',
+      search: '',
+      idolIds: [],
+      tagIds: [],
+      studioId: item?.include_studio_filter ? item?.studio_id || 0 : null,
+      studioName: item?.include_studio_filter ? item?.studio_name || '' : '',
+      seriesId: null,
+      prefix: item?.prefix || '',
+      soloOnly: false,
+      favoriteRatingEnabled: false,
+      favoriteGroupId: null,
+      random: false,
+      tempSort: '',
+    })
+
   return (
     <div className="app-shell min-h-screen">
       <SideTabs
         activeTab={isJavMode ? javTab : 'video'}
-        buildJavPrefixUrl={(item) =>
-          buildJavUrl({
-            page: 1,
-            tab: 'list',
-            search: '',
-            idolIds: [],
-            tagIds: [],
-            studioId: item?.include_studio_filter ? item?.studio_id || 0 : null,
-            studioName: item?.include_studio_filter ? item?.studio_name || '' : '',
-            seriesId: null,
-            prefix: item?.prefix || '',
-            soloOnly: false,
-            favoriteRatingEnabled: false,
-            favoriteGroupId: null,
-            random: false,
-            tempSort: '',
-          })
-        }
         canGoBack={browserNavigation.canGoBack}
         canGoForward={browserNavigation.canGoForward}
         isJavMode={isJavMode}
-        javPrefix={javPrefix}
+        onOpenJavPrefix={() => setJavPrefixModalOpen(true)}
         onBrowserBack={handleBrowserBack}
         onBrowserForward={handleBrowserForward}
         onOpenDownload={() => setDownloadOpen(true)}
         onOpenGlobalSettings={() => setGlobalSettingsOpen(true)}
         onOpenDisplaySettings={openDisplaySettings}
         onOpenJavTagModal={handleOpenJavTagModal}
-        onJavPrefixClick={handleSelectJavPrefix}
         onOpenTagModal={handleOpenTagModal}
         onSelectTab={handleSelectSideTab}
         showDirectorySetupHint={showDirectorySetupHint}
       />
+      <MobileTabBar
+        activeTab={isJavMode ? javTab : 'video'}
+        isJavMode={isJavMode}
+        onOpenDownload={() => setDownloadOpen(true)}
+        onOpenGlobalSettings={() => setGlobalSettingsOpen(true)}
+        onOpenDisplaySettings={openDisplaySettings}
+        onOpenJavPrefix={() => setJavPrefixModalOpen(true)}
+        onOpenJavTagModal={handleOpenJavTagModal}
+        onOpenTagModal={handleOpenTagModal}
+        onSelectTab={handleSelectSideTab}
+        showDirectorySetupHint={showDirectorySetupHint}
+      />
+      <JavPrefixModalLauncher
+        open={javPrefixModalOpen}
+        activePrefix={javPrefix}
+        buildPrefixUrl={buildJavPrefixUrl}
+        onSelectPrefix={handleSelectJavPrefix}
+        onClose={() => setJavPrefixModalOpen(false)}
+      />
       <TopBar
+        canGoBack={browserNavigation.canGoBack}
+        canGoForward={browserNavigation.canGoForward}
+        onBrowserBack={handleBrowserBack}
+        onBrowserForward={handleBrowserForward}
         buildFavoriteGroupUrl={(groupId) => {
           const parsedGroupId = Number(groupId)
           const targetGroupId =

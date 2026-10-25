@@ -160,7 +160,7 @@ export default function VideoCard({
             {zh(`已刮削 ${javCode}`, `Scraped ${javCode}`)}
           </div>
         ) : null}
-        <div className="card-hover-focus-visible absolute bottom-2 left-2 z-10 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="video-card__screenshots card-hover-focus-visible absolute bottom-2 left-2 z-10 opacity-0 transition-opacity group-hover:opacity-100">
           <button
             type="button"
             onClick={handleOpenScreenshots}
@@ -169,6 +169,30 @@ export default function VideoCard({
             className="flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white shadow-lg shadow-black/60 hover:bg-black/85"
           >
             <PhotoLibraryOutlinedIcon className="h-5 w-5 text-white" fontSize="inherit" />
+          </button>
+        </div>
+        <div className="video-card__play card-hover-focus-visible pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              e.currentTarget.blur()
+              onPlay(video)
+            }}
+            onPointerUp={(e) => {
+              e.currentTarget.blur()
+            }}
+            className="pointer-events-auto rounded-full bg-black/60 p-3 hover:bg-black/80"
+            aria-label={zh('播放', 'Play')}
+            title={zh('播放', 'Play')}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="h-10 w-10"
+            >
+              <path d="M8 5v14l11-7z" />
+            </svg>
           </button>
         </div>
       </div>
@@ -313,31 +337,6 @@ export default function VideoCard({
             </div>
           </Popover>
         </div>
-      </div>
-
-      <div className="card-hover-focus-visible pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition-opacity group-hover:opacity-100">
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            e.currentTarget.blur()
-            onPlay(video)
-          }}
-          onPointerUp={(e) => {
-            e.currentTarget.blur()
-          }}
-          className="pointer-events-auto rounded-full bg-black/60 p-3 hover:bg-black/80"
-          aria-label={zh('播放', 'Play')}
-          title={zh('播放', 'Play')}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            className="h-10 w-10"
-          >
-            <path d="M8 5v14l11-7z" />
-          </svg>
-        </button>
       </div>
     </div>
   )

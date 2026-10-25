@@ -2,6 +2,7 @@ import { useStore } from '@/store'
 import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useCallback } from 'react'
 import { configFlag } from '@/utils/config'
+import { isSmallViewport } from '@/utils/viewport'
 
 export default function useListDisplay({ configLoaded, hydrated }) {
   const {
@@ -30,13 +31,15 @@ export default function useListDisplay({ configLoaded, hydrated }) {
 
   useEffect(() => {
     if (!configLoaded) return
+    // Phones always use waterfall mode; the compact switch is hidden there.
+    const mobileWaterfall = isSmallViewport()
     setWaterfallModes((current) => ({
       ...current,
-      video: configFlag(config?.video_waterfall_default),
-      jav: configFlag(config?.jav_waterfall_default),
-      idol: configFlag(config?.idol_waterfall_default),
-      studio: configFlag(config?.studio_waterfall_default),
-      series: configFlag(config?.series_waterfall_default),
+      video: mobileWaterfall || configFlag(config?.video_waterfall_default),
+      jav: mobileWaterfall || configFlag(config?.jav_waterfall_default),
+      idol: mobileWaterfall || configFlag(config?.idol_waterfall_default),
+      studio: mobileWaterfall || configFlag(config?.studio_waterfall_default),
+      series: mobileWaterfall || configFlag(config?.series_waterfall_default),
     }))
   }, [
     setWaterfallModes,
