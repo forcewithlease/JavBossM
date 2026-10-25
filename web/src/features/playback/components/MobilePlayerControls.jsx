@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded'
+import ClosedCaptionIcon from '@mui/icons-material/ClosedCaption'
+import ClosedCaptionOffIcon from '@mui/icons-material/ClosedCaptionOffOutlined'
 import FullscreenExitRoundedIcon from '@mui/icons-material/FullscreenExitRounded'
 import FullscreenRoundedIcon from '@mui/icons-material/FullscreenRounded'
 import PauseRoundedIcon from '@mui/icons-material/PauseRounded'
@@ -35,6 +37,12 @@ export default function MobilePlayerControls({
   currentIndex = 0,
   onSelectVideo,
   onClose,
+  subtitleTracks = [],
+  subtitlesEnabled = false,
+  activeSubtitleId = '',
+  onSelectSubtitle,
+  onDisableSubtitles,
+  subtitleText = '',
 }) {
   const rootRef = useRef(null)
   const hideTimerRef = useRef(null)
@@ -52,6 +60,8 @@ export default function MobilePlayerControls({
   const [hud, setHud] = useState('')
   const [brightness, setBrightness] = useState(1)
   const [playlistOpen, setPlaylistOpen] = useState(false)
+  const [subtitleOpen, setSubtitleOpen] = useState(false)
+  const [subtitleBottom, setSubtitleBottom] = useState(78)
   const [speedOpen, setSpeedOpen] = useState(false)
   const [fullscreen, setFullscreen] = useState(
     () => typeof document !== 'undefined' && Boolean(document.fullscreenElement)
@@ -84,14 +94,14 @@ export default function MobilePlayerControls({
 
   useEffect(() => {
     clearHideTimer()
-    if (playlistOpen || speedOpen) {
+    if (playlistOpen || speedOpen || subtitleOpen) {
       setControlsVisible(true)
       return clearHideTimer
     }
     if (playing) revealControls()
     else setControlsVisible(true)
     return clearHideTimer
-  }, [playing, playlistOpen, speedOpen, revealControls, clearHideTimer])
+  }, [playing, playlistOpen, speedOpen, subtitleOpen, revealControls, clearHideTimer])
 
   useEffect(
     () => () => {
@@ -102,6 +112,33 @@ export default function MobilePlayerControls({
     },
     [clearHideTimer]
   )
+
+  useEffect(() => {
+    if (!player) return undefined
+    // Keep subtitles just below the letterboxed video, like a mobile video app.
+    const updateSubtitlePosition = () => {
+      const video = player.el()?.querySelector('video')
+      const stage = rootRef.current
+      if (!video || !stage || !video.videoWidth || !video.videoHeight) return
+      const videoRect = video.getBoundingClientRect()
+      const stageRect = stage.getBoundingClientRect()
+      const aspect = video.videoWidth / video.videoHeight
+      let contentHeight = videoRect.width / aspect
+      if (contentHeight > videoRect.height) contentHeight = videoRect.height
+      const contentTop = videoRect.top + (videoRect.height - contentHeight) / 2
+      const contentBottom = contentTop + contentHeight
+      setSubtitleBottom(Math.max(52, Math.round(stageRect.bottom - contentBottom + 12)))
+    }
+    updateSubtitlePosition()
+    player.on('loadedmetadata', updateSubtitlePosition)
+    window.addEventListener('resize', updateSubtitlePosition)
+    document.addEventListener('fullscreenchange', updateSubtitlePosition)
+    return () => {
+      player.off('loadedmetadata', updateSubtitlePosition)
+      window.removeEventListener('resize', updateSubtitlePosition)
+      document.removeEventListener('fullscreenchange', updateSubtitlePosition)
+    }
+  }, [player])
 
   useEffect(() => {
     if (!player) return undefined
@@ -294,6 +331,7 @@ export default function MobilePlayerControls({
       tapTimerRef.current = window.setTimeout(() => {
         tapTimerRef.current = null
         setSpeedOpen(false)
+        setSubtitleOpen(false)
         setControlsVisible((visible) => !visible)
       }, DOUBLE_TAP_DELAY_MS)
       return
@@ -356,6 +394,26 @@ export default function MobilePlayerControls({
               </span>
             ) : null}
           </div>
+          {subtitleTracks.length > 0 ? (
+            <button
+              type="button"
+              className={`mobile-player__cc ${subtitlesEnabled ? 'mobile-player__cc--active' : ''}`}
+              onClick={() => {
+                setSubtitleOpen(true)
+                setSpeedOpen(false)
+                setPlaylistOpen(false)
+                revealControls()
+              }}
+              aria-label={zh('字幕', 'Subtitles')}
+              aria-haspopup="dialog"
+            >
+              {subtitlesEnabled ? (
+                <ClosedCaptionIcon fontSize="small" />
+              ) : (
+                <ClosedCaptionOffIcon fontSize="small" />
+              )}
+            </button>
+          ) : null}
         </div>
 
         <button
@@ -467,6 +525,7 @@ export default function MobilePlayerControls({
                 onClick={() => {
                   setPlaylistOpen(true)
                   setSpeedOpen(false)
+                  setSubtitleOpen(false)
                 }}
                 aria-label={zh('选集', 'Episodes')}
               >
@@ -489,9 +548,68 @@ export default function MobilePlayerControls({
         </div>
       </div>
 
+      {subtitleText ? (
+        <div
+          className="mobile-player__subtitle"
+          style={{ bottom: `${subtitleBottom}px` }}
+          aria-live="off"
+        >
+          {subtitleText}
+        </div>
+      ) : null}
+
       {hud ? (
         <div className="mobile-player__hud" aria-live="polite">
           {hud}
+        </div>
+      ) : null}
+
+      {subtitleOpen ? (
+        <div className="mobile-player__sheet-backdrop">
+          <div className="mobile-player__sheet" role="dialog" aria-label={zh('字幕', 'Subtitles')}>
+            <div className="mobile-player__sheet-header">
+              <span>{zh('字幕', 'Subtitles')}</span>
+              <button type="button" onClick={() => setSubtitleOpen(false)}>
+                {zh('关闭', 'Close')}
+              </button>
+            </div>
+            <ol className="mobile-player__episodes">
+              <li>
+                <button
+                  type="button"
+                  className={!subtitlesEnabled ? 'is-active' : ''}
+                  onClick={() => {
+                    onDisableSubtitles?.()
+                    setSubtitleOpen(false)
+                  }}
+                >
+                  <span className="mobile-player__episode-index">
+                    <ClosedCaptionOffIcon fontSize="inherit" />
+                  </span>
+                  <span className="mobile-player__episode-title">
+                    {zh('关闭字幕', 'Subtitles off')}
+                  </span>
+                </button>
+              </li>
+              {subtitleTracks.map((track) => (
+                <li key={track.id}>
+                  <button
+                    type="button"
+                    className={subtitlesEnabled && track.id === activeSubtitleId ? 'is-active' : ''}
+                    onClick={() => {
+                      onSelectSubtitle?.(track.id)
+                      setSubtitleOpen(false)
+                    }}
+                  >
+                    <span className="mobile-player__episode-index">
+                      <ClosedCaptionIcon fontSize="inherit" />
+                    </span>
+                    <span className="mobile-player__episode-title">{track.label}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </div>
         </div>
       ) : null}
 

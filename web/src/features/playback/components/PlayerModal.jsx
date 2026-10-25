@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useMediaQuery } from '@mui/material'
+import { Menu, MenuItem, useMediaQuery } from '@mui/material'
 import { SMALL_VIEWPORT_QUERY } from '@/utils/viewport'
 import QueuePlayNextRoundedIcon from '@mui/icons-material/QueuePlayNextRounded'
 import SkipPreviousRoundedIcon from '@mui/icons-material/SkipPreviousRounded'
@@ -8,10 +8,18 @@ import SkipNextRoundedIcon from '@mui/icons-material/SkipNextRounded'
 import PlaybackPlaylist from '@/features/playback/components/PlaybackPlaylist'
 import MobilePlayerControls from '@/features/playback/components/MobilePlayerControls'
 import usePlayerWindow from '@/features/playback/hooks/usePlayerWindow'
+import useActiveCueText from '@/features/playback/hooks/useActiveCueText'
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
+import ClosedCaptionIcon from '@mui/icons-material/ClosedCaption'
+import ClosedCaptionOffIcon from '@mui/icons-material/ClosedCaptionOffOutlined'
 import videojs from 'video.js'
 import 'video.js/dist/video-js.css'
-import { createVideoScreenshot, fetchPlaybackInfo } from '@/features/video/api'
+import {
+  createVideoScreenshot,
+  fetchPlaybackInfo,
+  fetchVideoSubtitles,
+  videoSubtitleUrl,
+} from '@/features/video/api'
 import { getVideoDisplayName } from '@/utils/display'
 import {
   PLAYER_HOTKEY_ACTIONS,
@@ -29,6 +37,23 @@ import { createPlaybackSession, reportPlaybackSession } from '@/features/playbac
 import { fetchTools } from '@/features/settings/api'
 
 const VOLUME_STORAGE_KEY = 'javboss.player.volume'
+const SUBTITLE_STORAGE_KEY = 'javboss.player.subtitles'
+
+function readSubtitlesEnabled() {
+  try {
+    return localStorage.getItem(SUBTITLE_STORAGE_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+
+function writeSubtitlesEnabled(enabled) {
+  try {
+    localStorage.setItem(SUBTITLE_STORAGE_KEY, enabled ? '1' : '0')
+  } catch {
+    // Storage may be unavailable.
+  }
+}
 const HOTKEY_HINT_DURATION_MS = 5000
 
 function formatSignedAmount(amount) {
@@ -58,6 +83,11 @@ export default function PlayerModal({
     () =>
       typeof window.matchMedia !== 'function' || !window.matchMedia('(max-width: 767px)').matches
   )
+  const [subtitleTracks, setSubtitleTracks] = useState([])
+  const [activeSubtitleId, setActiveSubtitleId] = useState('')
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState(readSubtitlesEnabled)
+  const [subtitleMenuAnchor, setSubtitleMenuAnchor] = useState(null)
+  const subtitleTrackElementsRef = useRef([])
   const onCloseRef = useRef(onClose)
   const hotkeyMapRef = useRef(new Map())
   const screenshotInFlightRef = useRef(false)
@@ -411,6 +441,92 @@ export default function PlayerModal({
     isMobilePlayer,
   ])
 
+  const playbackLocationId =
+    playbackInfo?.video?.id === video?.id ? playbackInfo?.location_id : undefined
+
+  useEffect(() => {
+    if (!isOpen || !video?.id) {
+      setSubtitleTracks([])
+      setActiveSubtitleId('')
+      return undefined
+    }
+    const controller = new AbortController()
+    fetchVideoSubtitles(video.id, { locationId: playbackLocationId, signal: controller.signal })
+      .then((payload) => {
+        const tracks = Array.isArray(payload?.tracks) ? payload.tracks : []
+        setSubtitleTracks(tracks)
+        setActiveSubtitleId((current) =>
+          tracks.some((track) => track.id === current) ? current : tracks[0]?.id || ''
+        )
+      })
+      .catch((error) => {
+        if (error?.name === 'AbortError') return
+        setSubtitleTracks([])
+        setActiveSubtitleId('')
+      })
+    return () => controller.abort()
+  }, [isOpen, video?.id, playbackLocationId])
+
+  useEffect(() => {
+    if (!player || player.isDisposed() || !video?.id) return undefined
+    const elements = subtitleTracks
+      .map((track) => {
+        try {
+          return player.addRemoteTextTrack(
+            {
+              kind: 'subtitles',
+              src: videoSubtitleUrl(video.id, track.id, playbackLocationId),
+              srclang: track.language || 'zh',
+              label: track.label,
+            },
+            false
+          )
+        } catch {
+          return null
+        }
+      })
+      .filter(Boolean)
+    subtitleTrackElementsRef.current = elements
+    return () => {
+      elements.forEach((element) => {
+        try {
+          player.removeRemoteTextTrack(element)
+        } catch {
+          // The player may already be disposed.
+        }
+      })
+      subtitleTrackElementsRef.current = []
+    }
+  }, [player, subtitleTracks, video?.id, playbackLocationId])
+
+  useEffect(() => {
+    if (!player || player.isDisposed()) return undefined
+    const elements = subtitleTrackElementsRef.current
+    const activeIndex = subtitleTracks.findIndex((track) => track.id === activeSubtitleId)
+    const apply = () => {
+      elements.forEach((element, index) => {
+        const track = element?.track
+        if (!track) return
+        track.mode = subtitlesEnabled && index === activeIndex ? 'showing' : 'disabled'
+      })
+    }
+    apply()
+    const timer = window.setTimeout(apply, 150)
+    return () => window.clearTimeout(timer)
+  }, [player, subtitleTracks, activeSubtitleId, subtitlesEnabled])
+
+  const applySubtitlesEnabled = (enabled) => {
+    setSubtitlesEnabled(enabled)
+    writeSubtitlesEnabled(enabled)
+  }
+
+  const selectSubtitle = (trackId) => {
+    setActiveSubtitleId(trackId)
+    applySubtitlesEnabled(true)
+  }
+
+  const subtitleText = useActiveCueText(player, subtitlesEnabled)
+
   if (!video) return null
 
   const displayName = getVideoDisplayName(video)
@@ -434,6 +550,12 @@ export default function PlayerModal({
             currentIndex={currentIndex}
             onSelectVideo={onSelectVideo}
             onClose={onClose}
+            subtitleTracks={subtitleTracks}
+            subtitlesEnabled={subtitlesEnabled}
+            activeSubtitleId={activeSubtitleId}
+            onSelectSubtitle={selectSubtitle}
+            onDisableSubtitles={() => applySubtitlesEnabled(false)}
+            subtitleText={subtitleText}
           />
           {playbackLoading ? (
             <div className="mobile-player__loading" aria-live="polite">
@@ -509,6 +631,55 @@ export default function PlayerModal({
               </button>
             </>
           ) : null}
+          {subtitleTracks.length > 0 ? (
+            <>
+              <button
+                type="button"
+                aria-label={zh('字幕', 'Subtitles')}
+                title={zh('字幕', 'Subtitles')}
+                aria-haspopup="menu"
+                aria-expanded={Boolean(subtitleMenuAnchor)}
+                onClick={(event) => setSubtitleMenuAnchor(event.currentTarget)}
+                className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded transition hover:bg-zinc-100 ${
+                  subtitlesEnabled ? 'text-blue-600' : 'text-zinc-500'
+                }`}
+              >
+                {subtitlesEnabled ? (
+                  <ClosedCaptionIcon sx={{ fontSize: 18 }} />
+                ) : (
+                  <ClosedCaptionOffIcon sx={{ fontSize: 18 }} />
+                )}
+              </button>
+              <Menu
+                anchorEl={subtitleMenuAnchor}
+                open={Boolean(subtitleMenuAnchor)}
+                onClose={() => setSubtitleMenuAnchor(null)}
+                disableScrollLock
+              >
+                <MenuItem
+                  selected={!subtitlesEnabled}
+                  onClick={() => {
+                    applySubtitlesEnabled(false)
+                    setSubtitleMenuAnchor(null)
+                  }}
+                >
+                  {zh('关闭字幕', 'Subtitles off')}
+                </MenuItem>
+                {subtitleTracks.map((track) => (
+                  <MenuItem
+                    key={track.id}
+                    selected={subtitlesEnabled && track.id === activeSubtitleId}
+                    onClick={() => {
+                      selectSubtitle(track.id)
+                      setSubtitleMenuAnchor(null)
+                    }}
+                  >
+                    {track.label}
+                  </MenuItem>
+                ))}
+              </Menu>
+            </>
+          ) : null}
           <button
             type="button"
             aria-label={zh('关闭', 'Close')}
@@ -546,6 +717,7 @@ export default function PlayerModal({
                 {zh('加载播放信息中…', 'Loading playback info...')}
               </div>
             ) : null}
+            {subtitleText ? <div className="player-subtitle">{subtitleText}</div> : null}
             {playbackError && player && !player.isDisposed()
               ? createPortal(
                   <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/80 p-6">

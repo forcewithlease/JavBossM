@@ -181,3 +181,22 @@ export async function deleteVideoLocation(videoId, locationId) {
     throw await apiError(res)
   }
 }
+
+export async function fetchVideoSubtitles(id, { locationId, signal } = {}) {
+  const params = new URLSearchParams()
+  if (locationId) params.set('location_id', String(locationId))
+  const query = params.toString()
+  const res = await apiFetch(`/videos/${id}/subtitles${query ? `?${query}` : ''}`, {
+    cache: 'no-store',
+    signal,
+  })
+  if (!res.ok) throw await apiError(res)
+  return res.json()
+}
+
+export function videoSubtitleUrl(id, trackId, locationId) {
+  const params = new URLSearchParams()
+  if (locationId) params.set('location_id', String(locationId))
+  const query = params.toString()
+  return `/videos/${id}/subtitles/${encodeURIComponent(trackId)}${query ? `?${query}` : ''}`
+}
