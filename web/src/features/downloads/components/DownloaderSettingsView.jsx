@@ -13,6 +13,7 @@ import {
   updateDownloaderSettings,
 } from '@/features/downloads/api'
 import DirectoryPickerModal from '@/features/directories/components/DirectoryPickerModal'
+import LocalDownloaderPicker from '@/features/downloads/components/LocalDownloaderPicker'
 import { getErrorMessage } from '@/utils/errors'
 import { useStore } from '@/store'
 import { apiHostPath, displayHostPath, hostPathsEnabled } from '@/utils/hostPath'
@@ -239,6 +240,17 @@ export default function DownloaderSettingsView() {
         </div>
       ) : null}
 
+      <LocalDownloaderPicker
+        activeProvider={settings?.active_provider || ''}
+        onChanged={(payload) => {
+          if (payload) setSettings(payload)
+        }}
+        onToast={(message) => {
+          setNotice(message)
+          setError('')
+        }}
+      />
+
       <div className="grid gap-3 lg:grid-cols-2">
         <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <div>
@@ -363,169 +375,173 @@ export default function DownloaderSettingsView() {
           </form>
         </section>
 
-        <section className="flex flex-col rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">
-                {zh('CloudDrive2 设置', 'CloudDrive2 settings')}
-              </h2>
-              <p className="mt-0.5 text-xs text-gray-500">
-                {zh(
-                  '配置 CloudDrive2 连接和云端离线目录。',
-                  'Configure the CloudDrive2 connection and remote offline folder.'
-                )}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <span
-                role="status"
-                className={`inline-flex h-6 items-center gap-1.5 rounded-full px-2 text-[11px] font-semibold ring-1 ring-inset ${cloudDrive2StatusDisplay.className}`}
-              >
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${cloudDrive2StatusDisplay.dotClassName}`}
-                  aria-hidden="true"
-                />
-                {cloudDrive2StatusDisplay.label}
-              </span>
-              <button
-                type="button"
-                disabled={busy || cloudDrive2Status === 'checking'}
-                onClick={() =>
-                  void checkCloudDrive2(
-                    connectionEditing
-                      ? {
-                          address: form.address.trim(),
-                          remote_folder: form.remoteFolder.trim(),
-                          api_token: form.apiToken.trim(),
-                        }
-                      : undefined
-                  )
-                }
-                aria-label={zh('检测可用性', 'Check availability')}
-                title={zh('检测可用性', 'Check availability')}
-                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 bg-white text-[14px] text-gray-500 transition hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50"
-              >
-                <RefreshRoundedIcon
-                  fontSize="inherit"
-                  className={cloudDrive2Status === 'checking' ? 'animate-spin' : ''}
-                />
-              </button>
-            </div>
-          </div>
-          {cloudDrive2Status === 'unavailable' && cloudDrive2StatusError ? (
-            <div
-              role="alert"
-              className="mt-2 break-words rounded-md bg-red-50 px-2.5 py-1.5 text-[11px] text-red-700"
-            >
-              <span className="font-semibold">{zh('不可用原因：', 'Unavailable reason: ')}</span>
-              {cloudDrive2StatusError}
-            </div>
-          ) : null}
-          <form onSubmit={handleConnectionSave} className="mt-3 flex flex-1 flex-col">
-            <div className="grid gap-3 lg:grid-cols-2">
-              <label className="text-xs font-medium text-gray-600">
-                {zh('CloudDrive2 地址', 'CloudDrive2 address')}
-                <input
-                  value={form.address}
-                  disabled={!connectionEditing || busy}
-                  onChange={(event) => updateForm('address', event.target.value)}
-                  placeholder={defaultForm.address}
-                  className="mt-1 h-9 w-full rounded-lg border border-gray-300 px-3 text-xs outline-none focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
-                />
-              </label>
-              <label className="text-xs font-medium text-gray-600">
-                {zh('云端离线目录', 'Remote offline folder')}
-                <input
-                  value={form.remoteFolder}
-                  disabled={!connectionEditing || busy}
-                  onChange={(event) => updateForm('remoteFolder', event.target.value)}
-                  placeholder="/115open/..."
-                  className="mt-1 h-9 w-full rounded-lg border border-gray-300 px-3 text-xs outline-none focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
-                />
-              </label>
-              <div className="text-xs font-medium text-gray-600 lg:col-span-2">
-                <div className="flex items-center gap-1">
-                  <label htmlFor="clouddrive2-api-token">API Token</label>
-                  <Tooltip
-                    arrow
-                    describeChild
-                    title={zh(
-                      '在 CloudDrive2 中创建 API 令牌，至少需要开启以下权限：列出文件、创建目录、读取文件、添加离线下载、查看离线下载',
-                      'Create an API token in CloudDrive2 and enable at least the following permissions: list files, create folders, read files, add offline downloads, and list offline downloads'
-                    )}
-                  >
-                    <button
-                      type="button"
-                      aria-label={zh('API 令牌所需权限', 'Required API token permissions')}
-                      className="inline-flex rounded-full text-gray-400 hover:text-gray-600"
-                    >
-                      <HelpOutlineRoundedIcon sx={{ fontSize: 14 }} />
-                    </button>
-                  </Tooltip>
-                </div>
-                <div className="relative mt-1">
-                  <input
-                    id="clouddrive2-api-token"
-                    disabled={!connectionEditing || busy}
-                    type={tokenVisible ? 'text' : 'password'}
-                    value={form.apiToken}
-                    onChange={(event) => updateForm('apiToken', event.target.value)}
-                    autoComplete="new-password"
-                    className="h-9 w-full rounded-lg border border-gray-300 py-2 pl-3 pr-11 text-xs outline-none focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
-                  />
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => setTokenVisible((visible) => !visible)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 hover:bg-gray-100 disabled:opacity-50"
-                    aria-label={
-                      tokenVisible ? zh('隐藏 Token', 'Hide token') : zh('显示 Token', 'Show token')
-                    }
-                  >
-                    {tokenVisible ? (
-                      <VisibilityOutlinedIcon fontSize="small" />
-                    ) : (
-                      <VisibilityOffOutlinedIcon fontSize="small" />
-                    )}
-                  </button>
-                </div>
+        {(!settings?.active_provider || settings.active_provider === 'clouddrive2') && (
+          <section className="flex flex-col rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  {zh('CloudDrive2 设置', 'CloudDrive2 settings')}
+                </h2>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {zh(
+                    '配置 CloudDrive2 连接和云端离线目录。',
+                    'Configure the CloudDrive2 connection and remote offline folder.'
+                  )}
+                </p>
               </div>
-            </div>
-            <div className="mt-auto flex justify-end gap-2 border-t border-gray-100 pt-3">
-              {!connectionEditing && (
+              <div className="flex shrink-0 items-center gap-1.5">
+                <span
+                  role="status"
+                  className={`inline-flex h-6 items-center gap-1.5 rounded-full px-2 text-[11px] font-semibold ring-1 ring-inset ${cloudDrive2StatusDisplay.className}`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${cloudDrive2StatusDisplay.dotClassName}`}
+                    aria-hidden="true"
+                  />
+                  {cloudDrive2StatusDisplay.label}
+                </span>
                 <button
                   type="button"
-                  disabled={busy}
-                  onClick={startConnectionEditing}
-                  className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white disabled:opacity-50"
+                  disabled={busy || cloudDrive2Status === 'checking'}
+                  onClick={() =>
+                    void checkCloudDrive2(
+                      connectionEditing
+                        ? {
+                            address: form.address.trim(),
+                            remote_folder: form.remoteFolder.trim(),
+                            api_token: form.apiToken.trim(),
+                          }
+                        : undefined
+                    )
+                  }
+                  aria-label={zh('检测可用性', 'Check availability')}
+                  title={zh('检测可用性', 'Check availability')}
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 bg-white text-[14px] text-gray-500 transition hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50"
                 >
-                  {zh('编辑', 'Edit')}
+                  <RefreshRoundedIcon
+                    fontSize="inherit"
+                    className={cloudDrive2Status === 'checking' ? 'animate-spin' : ''}
+                  />
                 </button>
-              )}
-              {connectionEditing && (
-                <>
+              </div>
+            </div>
+            {cloudDrive2Status === 'unavailable' && cloudDrive2StatusError ? (
+              <div
+                role="alert"
+                className="mt-2 break-words rounded-md bg-red-50 px-2.5 py-1.5 text-[11px] text-red-700"
+              >
+                <span className="font-semibold">{zh('不可用原因：', 'Unavailable reason: ')}</span>
+                {cloudDrive2StatusError}
+              </div>
+            ) : null}
+            <form onSubmit={handleConnectionSave} className="mt-3 flex flex-1 flex-col">
+              <div className="grid gap-3 lg:grid-cols-2">
+                <label className="text-xs font-medium text-gray-600">
+                  {zh('CloudDrive2 地址', 'CloudDrive2 address')}
+                  <input
+                    value={form.address}
+                    disabled={!connectionEditing || busy}
+                    onChange={(event) => updateForm('address', event.target.value)}
+                    placeholder={defaultForm.address}
+                    className="mt-1 h-9 w-full rounded-lg border border-gray-300 px-3 text-xs outline-none focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+                  />
+                </label>
+                <label className="text-xs font-medium text-gray-600">
+                  {zh('云端离线目录', 'Remote offline folder')}
+                  <input
+                    value={form.remoteFolder}
+                    disabled={!connectionEditing || busy}
+                    onChange={(event) => updateForm('remoteFolder', event.target.value)}
+                    placeholder="/115open/..."
+                    className="mt-1 h-9 w-full rounded-lg border border-gray-300 px-3 text-xs outline-none focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+                  />
+                </label>
+                <div className="text-xs font-medium text-gray-600 lg:col-span-2">
+                  <div className="flex items-center gap-1">
+                    <label htmlFor="clouddrive2-api-token">API Token</label>
+                    <Tooltip
+                      arrow
+                      describeChild
+                      title={zh(
+                        '在 CloudDrive2 中创建 API 令牌，至少需要开启以下权限：列出文件、创建目录、读取文件、添加离线下载、查看离线下载',
+                        'Create an API token in CloudDrive2 and enable at least the following permissions: list files, create folders, read files, add offline downloads, and list offline downloads'
+                      )}
+                    >
+                      <button
+                        type="button"
+                        aria-label={zh('API 令牌所需权限', 'Required API token permissions')}
+                        className="inline-flex rounded-full text-gray-400 hover:text-gray-600"
+                      >
+                        <HelpOutlineRoundedIcon sx={{ fontSize: 14 }} />
+                      </button>
+                    </Tooltip>
+                  </div>
+                  <div className="relative mt-1">
+                    <input
+                      id="clouddrive2-api-token"
+                      disabled={!connectionEditing || busy}
+                      type={tokenVisible ? 'text' : 'password'}
+                      value={form.apiToken}
+                      onChange={(event) => updateForm('apiToken', event.target.value)}
+                      autoComplete="new-password"
+                      className="h-9 w-full rounded-lg border border-gray-300 py-2 pl-3 pr-11 text-xs outline-none focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+                    />
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setTokenVisible((visible) => !visible)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 hover:bg-gray-100 disabled:opacity-50"
+                      aria-label={
+                        tokenVisible
+                          ? zh('隐藏 Token', 'Hide token')
+                          : zh('显示 Token', 'Show token')
+                      }
+                    >
+                      {tokenVisible ? (
+                        <VisibilityOutlinedIcon fontSize="small" />
+                      ) : (
+                        <VisibilityOffOutlinedIcon fontSize="small" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-auto flex justify-end gap-2 border-t border-gray-100 pt-3">
+                {!connectionEditing && (
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={exitConnectionEditing}
-                    className="h-8 rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    {zh('退出编辑', 'Exit editing')}
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={busy}
+                    onClick={startConnectionEditing}
                     className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white disabled:opacity-50"
                   >
-                    {action === 'connection-save'
-                      ? zh('保存中…', 'Saving...')
-                      : zh('保存设置', 'Save settings')}
+                    {zh('编辑', 'Edit')}
                   </button>
-                </>
-              )}
-            </div>
-          </form>
-        </section>
+                )}
+                {connectionEditing && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={exitConnectionEditing}
+                      className="h-8 rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {zh('退出编辑', 'Exit editing')}
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={busy}
+                      className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      {action === 'connection-save'
+                        ? zh('保存中…', 'Saving...')
+                        : zh('保存设置', 'Save settings')}
+                    </button>
+                  </>
+                )}
+              </div>
+            </form>
+          </section>
+        )}
       </div>
       {pickerOpen && (
         <DirectoryPickerModal

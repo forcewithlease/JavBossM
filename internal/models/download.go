@@ -6,6 +6,9 @@ const (
 	MaxLocalDownloadConcurrency         = 3
 	DefaultMinVideoSizeBytes      int64 = 50 * 1024 * 1024
 	DownloaderProviderCloudDrive2       = "clouddrive2"
+	DownloaderProviderAria2             = "aria2"
+	DownloaderProviderQBittorrent       = "qbittorrent"
+	DefaultDownloaderProvider           = DownloaderProviderCloudDrive2
 
 	DownloadQueued             = "queued"
 	DownloadOfflineDownloading = "offline_downloading"
@@ -32,10 +35,26 @@ type DownloaderSettings struct {
 type DownloaderProviderSettings struct {
 	Provider     string    `json:"provider" gorm:"primaryKey"`
 	Address      string    `json:"address" gorm:"not null;default:''"`
+	Username     string    `json:"username" gorm:"not null;default:''"`
 	APIToken     string    `json:"-" gorm:"type:text;not null;default:''"`
 	RemoteFolder string    `json:"remote_folder" gorm:"not null;default:''"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// IsLocalDownloader reports whether a provider downloads directly into the
+// configured directory instead of staging files in a cloud drive.
+func IsLocalDownloader(provider string) bool {
+	switch provider {
+	case DownloaderProviderAria2, DownloaderProviderQBittorrent:
+		return true
+	default:
+		return false
+	}
+}
+
+func IsSupportedDownloaderProvider(provider string) bool {
+	return provider == DownloaderProviderCloudDrive2 || IsLocalDownloader(provider)
 }
 
 // DownloadJob is a persistent magnet download job with no JAV association.

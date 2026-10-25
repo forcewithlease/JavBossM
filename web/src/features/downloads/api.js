@@ -93,3 +93,47 @@ export async function deleteDownloadJob(id) {
   })
   if (!res.ok) throw await apiError(res)
 }
+
+export async function fetchDownloaderProviders() {
+  const res = await apiFetch('/downloader/providers', { cache: 'no-store' })
+  if (!res.ok) throw await apiError(res)
+  return parseJSONResponse(res)
+}
+
+export async function fetchDownloaderProvider(provider) {
+  const res = await apiFetch(`/downloader/providers/${encodeURIComponent(provider)}`, {
+    cache: 'no-store',
+  })
+  if (!res.ok) throw await apiError(res)
+  return parseJSONResponse(res)
+}
+
+export async function updateDownloaderProvider(provider, payload) {
+  const res = await apiFetch(`/downloader/providers/${encodeURIComponent(provider)}`, {
+    method: 'PUT',
+    headers: jsonHeaders,
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw await apiError(res)
+  return parseJSONResponse(res)
+}
+
+export async function testDownloaderProvider(provider, payload) {
+  const res = await apiFetch(`/downloader/providers/${encodeURIComponent(provider)}/test`, {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+  })
+  if (!res.ok) throw await apiError(res)
+  return parseJSONResponse(res)
+}
+
+export async function updateDownloaderActiveProvider(provider) {
+  const res = await apiFetch('/downloader/active-provider', {
+    method: 'PUT',
+    headers: jsonHeaders,
+    body: JSON.stringify({ provider }),
+  })
+  if (!res.ok) throw await apiError(res)
+  return parseJSONResponse(res)
+}

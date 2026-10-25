@@ -35,7 +35,9 @@ func (store *Store) GetDownloaderSettings(ctx context.Context) (*models.Download
 	if err != nil {
 		return nil, fmt.Errorf("get downloader settings: %w", err)
 	}
-	settings.ActiveProvider = models.DownloaderProviderCloudDrive2
+	if !models.IsSupportedDownloaderProvider(settings.ActiveProvider) {
+		settings.ActiveProvider = models.DefaultDownloaderProvider
+	}
 	return &settings, nil
 }
 
@@ -47,7 +49,10 @@ func (store *Store) SaveDownloaderSettings(ctx context.Context, settings *models
 		return errors.New("save downloader settings: missing settings")
 	}
 	settings.ID = 1
-	settings.ActiveProvider = models.DownloaderProviderCloudDrive2
+	settings.ActiveProvider = strings.TrimSpace(settings.ActiveProvider)
+	if !models.IsSupportedDownloaderProvider(settings.ActiveProvider) {
+		settings.ActiveProvider = models.DefaultDownloaderProvider
+	}
 	settings.DownloadDirectory = strings.TrimSpace(settings.DownloadDirectory)
 	if settings.LocalConcurrency < 1 || settings.LocalConcurrency > models.MaxLocalDownloadConcurrency {
 		settings.LocalConcurrency = 2
@@ -109,7 +114,7 @@ func (store *Store) SaveDownloaderProviderSettings(ctx context.Context, settings
 	settings.RemoteFolder = strings.TrimSpace(settings.RemoteFolder)
 	if err := store.conn.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "provider"}},
-		DoUpdates: clause.AssignmentColumns([]string{"address", "api_token", "remote_folder", "updated_at"}),
+		DoUpdates: clause.AssignmentColumns([]string{"address", "username", "api_token", "remote_folder", "updated_at"}),
 	}).Create(settings).Error; err != nil {
 		return fmt.Errorf("save downloader provider settings: %w", err)
 	}
@@ -130,7 +135,7 @@ func (store *Store) CreateDownloadJob(ctx context.Context, job *models.DownloadJ
 	if job.DownloadDirectory == "" || job.InfoHash == "" || job.MagnetURL == "" {
 		return errors.New("create download job: invalid job")
 	}
-	if job.Provider != models.DownloaderProviderCloudDrive2 {
+	if !models.IsSupportedDownloaderProvider(job.Provider) {
 		return errors.New("create download job: invalid provider")
 	}
 	job.Status = models.DownloadQueued
@@ -234,7 +239,7 @@ func (store *Store) ClaimNextQueuedDownloadJob(ctx context.Context, provider str
 	if store.conn == nil {
 		return nil, errors.New("claim download job: nil db")
 	}
-	if provider != models.DownloaderProviderCloudDrive2 {
+	if !models.IsSupportedDownloaderProvider(provider) {
 		return nil, errors.New("claim download job: invalid provider")
 	}
 	for attempts := 0; attempts < 10; attempts++ {

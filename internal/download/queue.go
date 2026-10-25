@@ -245,6 +245,9 @@ func processDownloadJob(ctx context.Context, job *models.DownloadJob, localLimit
 	if localRoot == "" {
 		return errors.New("local download directory is unavailable")
 	}
+	if models.IsLocalDownloader(job.Provider) {
+		return processLocalDownloadJob(ctx, job)
+	}
 	client, baseFolder, err := openDownloaderClient(ctx, job.Provider)
 	if err != nil {
 		return err
@@ -370,6 +373,186 @@ func processDownloadJob(ctx context.Context, job *models.DownloadJob, localLimit
 	return downloadJobFiles(ctx, job, client, remoteFolder, remoteFiles)
 }
 
+// processLocalDownloadJob delegates the transfer to a local daemon (aria2 or
+// qBittorrent). Files land directly in the job folder, so JavBoss only waits
+// for completion and records the resulting paths.
+func processLocalDownloadJob(ctx context.Context, job *models.DownloadJob) error {
+	settings, err := db.Default().GetDownloaderProviderSettings(ctx, job.Provider)
+	if err != nil {
+		return err
+	}
+	client, err := openLocalClient(settings)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	localRoot := strings.TrimSpace(job.DownloadDirectory)
+	folderName := downloadJobFolderName(job.MagnetName, job.InfoHash)
+	localFolder := filepath.Join(localRoot, folderName)
+	if err := os.MkdirAll(localFolder, 0o755); err != nil {
+		return fmt.Errorf("create local download directory: %w", err)
+	}
+	providerBase := strings.TrimSpace(settings.RemoteFolder)
+	if providerBase == "" {
+		providerBase = localRoot
+	}
+	providerFolder := filepath.Join(providerBase, folderName)
+
+	remoteTaskID := strings.TrimSpace(job.RemoteTaskID)
+	finished := false
+	defer func() {
+		if remoteTaskID == "" || finished {
+			return
+		}
+		current, loadErr := db.Default().GetDownloadJob(context.Background(), job.ID)
+		if loadErr != nil || current.Status != models.DownloadCanceled {
+			return
+		}
+		cancelCtx, cancelRemote := context.WithTimeout(context.Background(), downloaderAPITimeout)
+		defer cancelRemote()
+		if cancelErr := client.Remove(cancelCtx, remoteTaskID); cancelErr != nil {
+			logging.Error("cancel local download failed id=%d: %v", job.ID, cancelErr)
+		}
+	}()
+
+	if err := db.Default().UpdateDownloadJob(ctx, job.ID, map[string]any{
+		"status": models.DownloadOfflineDownloading, "error_message": "",
+		"remote_folder": providerFolder,
+	}); err != nil {
+		return err
+	}
+
+	if remoteTaskID != "" {
+		status, statusErr := localDownloadStatus(ctx, client, remoteTaskID)
+		if statusErr != nil {
+			return statusErr
+		}
+		if status.State == downloader.OfflineNotFound {
+			remoteTaskID = ""
+		} else if err := updateLocalProgress(ctx, job.ID, status); err != nil {
+			return err
+		} else if status.State == downloader.OfflineComplete {
+			finished = true
+		}
+	}
+	if remoteTaskID == "" {
+		taskID, addErr := client.Add(ctx, job.MagnetURL, providerFolder)
+		if addErr != nil {
+			return fmt.Errorf("submit local download: %w", addErr)
+		}
+		remoteTaskID = taskID
+		if err := db.Default().UpdateDownloadJob(ctx, job.ID, map[string]any{"remote_task_id": remoteTaskID}); err != nil {
+			return err
+		}
+	}
+	if !finished {
+		if err := waitForLocalDownload(ctx, client, job.ID, remoteTaskID); err != nil {
+			return err
+		}
+	}
+	finished = true
+
+	if err := db.Default().UpdateDownloadJob(ctx, job.ID, map[string]any{
+		"status": models.DownloadResolvingFiles,
+	}); err != nil {
+		return err
+	}
+	downloadSettings, err := db.Default().GetDownloaderSettings(ctx)
+	if err != nil {
+		return err
+	}
+	files, total, err := scanLocalDownloadFiles(localFolder, downloadSettings.MinVideoSizeBytes)
+	if err != nil {
+		return err
+	}
+	if len(files) == 0 {
+		return errors.New("the local download contains no files")
+	}
+	return db.Default().CompleteDownloadJob(ctx, job.ID, files, total, "")
+}
+
+func localDownloadStatus(ctx context.Context, client downloader.LocalClient, taskID string) (*downloader.LocalStatus, error) {
+	statusCtx, cancel := context.WithTimeout(ctx, downloaderAPITimeout)
+	defer cancel()
+	return client.Status(statusCtx, taskID)
+}
+
+func updateLocalProgress(ctx context.Context, jobID int64, status *downloader.LocalStatus) error {
+	if status == nil || status.TotalBytes <= 0 {
+		return nil
+	}
+	return db.Default().UpdateDownloadJob(ctx, jobID, map[string]any{
+		"bytes_total": status.TotalBytes, "bytes_downloaded": status.DoneBytes,
+	})
+}
+
+func waitForLocalDownload(ctx context.Context, client downloader.LocalClient, jobID int64, taskID string) error {
+	deadline := time.Now().Add(offlineDownloadMaxWait)
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		if time.Now().After(deadline) {
+			return errors.New("local download timed out")
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			status, err := localDownloadStatus(ctx, client, taskID)
+			if err != nil {
+				return err
+			}
+			if err := updateLocalProgress(ctx, jobID, status); err != nil {
+				return err
+			}
+			switch status.State {
+			case downloader.OfflineComplete:
+				return nil
+			case downloader.OfflineFailed, downloader.OfflineCanceled:
+				message := strings.TrimSpace(status.Message)
+				if message == "" {
+					message = "local download failed"
+				}
+				return errors.New(message)
+			}
+		}
+	}
+}
+
+// scanLocalDownloadFiles returns files that are large enough to be videos.
+// Partial and control files are ignored.
+func scanLocalDownloadFiles(root string, minSize int64) ([]string, int64, error) {
+	var files []string
+	var total int64
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		name := strings.ToLower(entry.Name())
+		if strings.HasSuffix(name, ".aria2") || strings.HasSuffix(name, ".part") || strings.HasSuffix(name, ".!qb") {
+			return nil
+		}
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			return infoErr
+		}
+		if info.Size() < minSize {
+			return nil
+		}
+		files = append(files, path)
+		total += info.Size()
+		return nil
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("scan local download folder: %w", err)
+	}
+	return files, total, nil
+}
+
 // downloadJobFiles isolates file failures so later files still get a chance to
 // download. Cancellation and failures to persist task progress stop the task.
 func downloadJobFiles(ctx context.Context, job *models.DownloadJob, client downloader.Client, remoteFolder string, remoteFiles []downloader.RemoteFile) error {
@@ -471,6 +654,14 @@ func TestDownloader(ctx context.Context, provider string) (*downloader.TestResul
 
 // TestDownloaderWithSettings checks a configuration without persisting it.
 func TestDownloaderWithSettings(ctx context.Context, settings *models.DownloaderProviderSettings) (*downloader.TestResult, error) {
+	if models.IsLocalDownloader(settings.Provider) {
+		client, err := openLocalClient(settings)
+		if err != nil {
+			return nil, err
+		}
+		defer client.Close()
+		return client.Test(ctx)
+	}
 	client, folder, err := openDownloaderClientWithSettings(settings)
 	if err != nil {
 		return nil, err

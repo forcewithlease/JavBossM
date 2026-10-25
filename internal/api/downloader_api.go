@@ -25,6 +25,7 @@ import (
 )
 
 type downloaderSettingsResponse struct {
+	ActiveProvider    string `json:"active_provider"`
 	DownloadDirectory string `json:"download_directory"`
 	LocalConcurrency  int    `json:"local_concurrency"`
 	MinVideoSizeMB    int64  `json:"min_video_size_mb"`
@@ -47,6 +48,7 @@ func updateDownloaderSettings(c *gin.Context) {
 		DownloadDirectory string `json:"download_directory"`
 		LocalConcurrency  int    `json:"local_concurrency"`
 		MinVideoSizeMB    int64  `json:"min_video_size_mb"`
+		ActiveProvider    string `json:"active_provider"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
 		respondLocalizedError(c, http.StatusBadRequest, "下载器配置格式不正确", "Invalid downloader settings")
@@ -65,8 +67,18 @@ func updateDownloaderSettings(c *gin.Context) {
 		respondLocalizedError(c, http.StatusBadRequest, "下载目录必须是已存在的本地绝对路径", "The download directory must be an existing absolute local path")
 		return
 	}
+	activeProvider := strings.TrimSpace(request.ActiveProvider)
+	if activeProvider == "" {
+		if current, loadErr := dbpkg.Default().GetDownloaderSettings(c.Request.Context()); loadErr == nil {
+			activeProvider = current.ActiveProvider
+		}
+	}
+	if activeProvider != "" && !models.IsSupportedDownloaderProvider(activeProvider) {
+		respondLocalizedError(c, http.StatusBadRequest, "下载器类型不受支持", "Unsupported downloader provider")
+		return
+	}
 	settings := models.DownloaderSettings{
-		ID: 1, ActiveProvider: models.DownloaderProviderCloudDrive2,
+		ID: 1, ActiveProvider: activeProvider,
 		DownloadDirectory: downloadDirectory,
 		LocalConcurrency:  request.LocalConcurrency,
 		MinVideoSizeBytes: request.MinVideoSizeMB * 1024 * 1024,
@@ -222,6 +234,7 @@ func loadDownloaderSettingsPayload(ctx context.Context) (*downloaderSettingsResp
 		return nil, err
 	}
 	return &downloaderSettingsResponse{
+		ActiveProvider:    settings.ActiveProvider,
 		DownloadDirectory: settings.DownloadDirectory, LocalConcurrency: settings.LocalConcurrency,
 		MinVideoSizeMB: settings.MinVideoSizeBytes / (1024 * 1024),
 		Address:        cloudDrive2.Address, RemoteFolder: cloudDrive2.RemoteFolder,
@@ -279,9 +292,13 @@ func enqueueDownloadJob(c *gin.Context, magnetURL string) {
 		respondLocalizedError(c, http.StatusBadRequest, "请选择本地下载目录", "Select a local download directory")
 		return
 	}
+	provider := settings.ActiveProvider
+	if !models.IsSupportedDownloaderProvider(provider) {
+		provider = models.DefaultDownloaderProvider
+	}
 	job := models.DownloadJob{
 		DownloadDirectory: downloadDirectory, InfoHash: infoHash, MagnetURL: magnetURL,
-		MagnetName: download.ParseMagnetName(magnetURL), Provider: models.DownloaderProviderCloudDrive2,
+		MagnetName: download.ParseMagnetName(magnetURL), Provider: provider,
 	}
 	if err := dbpkg.Default().CreateDownloadJob(c.Request.Context(), &job); err != nil {
 		respondLocalizedError(c, http.StatusInternalServerError, "创建下载任务失败", "Failed to create the download job")
@@ -320,7 +337,7 @@ func retryDownloadJob(c *gin.Context) {
 		respondLocalizedError(c, http.StatusNotFound, "下载任务不存在", "Download job not found")
 		return
 	}
-	if job.Provider != models.DownloaderProviderCloudDrive2 {
+	if !models.IsSupportedDownloaderProvider(job.Provider) {
 		respondLocalizedError(c, http.StatusConflict, "该下载任务的下载器不受支持", "The download provider for this job is unsupported")
 		return
 	}
@@ -420,4 +437,180 @@ func downloadJobID(c *gin.Context) (int64, bool) {
 		return 0, false
 	}
 	return id, true
+}
+
+// listDownloaderProviders probes the local machine for usable downloaders.
+// Detection is best-effort; unreachable providers are returned with detected=false.
+func listDownloaderProviders(c *gin.Context) {
+	providers, active := download.DetectProviders(c.Request.Context())
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{
+		"active_provider":  active,
+		"default_provider": models.DefaultDownloaderProvider,
+		"providers":        providers,
+	})
+}
+
+func downloaderProviderParam(c *gin.Context) (string, bool) {
+	provider := strings.TrimSpace(c.Param("provider"))
+	if !models.IsSupportedDownloaderProvider(provider) {
+		respondLocalizedError(c, http.StatusNotFound, "下载器类型不受支持", "Unsupported downloader provider")
+		return "", false
+	}
+	return provider, true
+}
+
+func updateDownloaderActiveProvider(c *gin.Context) {
+	var request struct {
+		Provider string `json:"provider"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		respondLocalizedError(c, http.StatusBadRequest, "下载器配置格式不正确", "Invalid downloader settings")
+		return
+	}
+	provider := strings.TrimSpace(request.Provider)
+	if !models.IsSupportedDownloaderProvider(provider) {
+		respondLocalizedError(c, http.StatusBadRequest, "下载器类型不受支持", "Unsupported downloader provider")
+		return
+	}
+	settings, err := dbpkg.Default().GetDownloaderSettings(c.Request.Context())
+	if err != nil {
+		respondLocalizedError(c, http.StatusInternalServerError, "读取下载器配置失败", "Failed to load downloader settings")
+		return
+	}
+	settings.ActiveProvider = provider
+	if err := dbpkg.Default().SaveDownloaderSettings(c.Request.Context(), settings); err != nil {
+		respondLocalizedError(c, http.StatusInternalServerError, "保存下载器配置失败", "Failed to save downloader settings")
+		return
+	}
+	download.Wake()
+	payload, err := loadDownloaderSettingsPayload(c.Request.Context())
+	if err != nil {
+		respondLocalizedError(c, http.StatusInternalServerError, "读取下载器配置失败", "Failed to load downloader settings")
+		return
+	}
+	c.JSON(http.StatusOK, payload)
+}
+
+func getDownloaderProvider(c *gin.Context) {
+	provider, ok := downloaderProviderParam(c)
+	if !ok {
+		return
+	}
+	settings, err := dbpkg.Default().GetDownloaderProviderSettings(c.Request.Context(), provider)
+	if err != nil {
+		respondLocalizedError(c, http.StatusInternalServerError, "读取下载器配置失败", "Failed to load downloader settings")
+		return
+	}
+	address := settings.Address
+	if response, lookupErr := loadDownloaderSettingsPayload(c.Request.Context()); lookupErr == nil && provider == models.DownloaderProviderCloudDrive2 {
+		address = response.Address
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"provider":         provider,
+		"address":          address,
+		"username":         settings.Username,
+		"remote_folder":    settings.RemoteFolder,
+		"token_configured": strings.TrimSpace(settings.APIToken) != "",
+	})
+}
+
+type downloaderProviderRequest struct {
+	Address       *string `json:"address"`
+	Username      *string `json:"username"`
+	APIToken      *string `json:"api_token"`
+	ClearAPIToken bool    `json:"clear_api_token"`
+	RemoteFolder  *string `json:"remote_folder"`
+}
+
+func (request downloaderProviderRequest) draft(provider string, current *models.DownloaderProviderSettings) (*models.DownloaderProviderSettings, error) {
+	draft := &models.DownloaderProviderSettings{Provider: provider}
+	if current != nil {
+		*draft = *current
+	}
+	if request.Address != nil {
+		draft.Address = strings.TrimSpace(*request.Address)
+	}
+	if request.Username != nil {
+		draft.Username = strings.TrimSpace(*request.Username)
+	}
+	if request.RemoteFolder != nil {
+		draft.RemoteFolder = strings.TrimSpace(*request.RemoteFolder)
+	}
+	if request.ClearAPIToken {
+		draft.APIToken = ""
+	} else if request.APIToken != nil {
+		draft.APIToken = strings.TrimSpace(*request.APIToken)
+	}
+	draft.Provider = provider
+	if len(draft.Address) > 500 || len(draft.RemoteFolder) > 2000 || len(draft.Username) > 200 || len(draft.APIToken) > 16384 {
+		return nil, errors.New("downloader settings are too long")
+	}
+	return draft, nil
+}
+
+func updateDownloaderProvider(c *gin.Context) {
+	provider, ok := downloaderProviderParam(c)
+	if !ok {
+		return
+	}
+	var request downloaderProviderRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		respondLocalizedError(c, http.StatusBadRequest, "下载器配置格式不正确", "Invalid provider settings")
+		return
+	}
+	current, err := dbpkg.Default().GetDownloaderProviderSettings(c.Request.Context(), provider)
+	if err != nil {
+		respondLocalizedError(c, http.StatusInternalServerError, "读取下载器配置失败", "Failed to load downloader settings")
+		return
+	}
+	draft, err := request.draft(provider, current)
+	if err != nil {
+		respondLocalizedError(c, http.StatusBadRequest, "下载器配置过长", "Downloader settings are too long")
+		return
+	}
+	if err := dbpkg.Default().SaveDownloaderProviderSettings(c.Request.Context(), draft); err != nil {
+		respondLocalizedError(c, http.StatusInternalServerError, "保存下载器配置失败", "Failed to save provider settings")
+		return
+	}
+	getDownloaderProvider(c)
+}
+
+// testDownloaderProvider accepts an optional draft body. Without a body it
+// tests the saved settings.
+func testDownloaderProvider(c *gin.Context) {
+	provider, ok := downloaderProviderParam(c)
+	if !ok {
+		return
+	}
+	var request downloaderProviderRequest
+	bindErr := c.ShouldBindJSON(&request)
+	if bindErr != nil && !errors.Is(bindErr, io.EOF) {
+		respondLocalizedError(c, http.StatusBadRequest, "下载器配置格式不正确", "Invalid provider settings")
+		return
+	}
+	current, err := dbpkg.Default().GetDownloaderProviderSettings(c.Request.Context(), provider)
+	if err != nil {
+		current = &models.DownloaderProviderSettings{Provider: provider}
+	}
+	draft := current
+	if bindErr == nil {
+		draft, err = request.draft(provider, current)
+		if err != nil {
+			respondLocalizedError(c, http.StatusBadRequest, "下载器配置过长", "Downloader settings are too long")
+			return
+		}
+	}
+	if strings.TrimSpace(draft.Address) == "" {
+		respondLocalizedError(c, http.StatusBadRequest, "请填写下载器地址", "Enter the downloader address")
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+	result, err := download.TestDownloaderWithSettings(ctx, draft)
+	if err != nil {
+		respondLocalizedError(c, http.StatusBadGateway, "下载器连接失败："+err.Error(), "Downloader connection failed: "+err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, result)
 }
